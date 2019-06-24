@@ -369,6 +369,27 @@ enum ViewType
   return self;
 }
 
+- (void)dealloc {
+    MVOutlineView *_leftView = leftView;
+    MVTableView *_rightView = rightView;
+    NSSearchField *_searchField = searchField;
+    NSTextField *_statusText = statusText;
+    NSProgressIndicator *_progressIndicator = progressIndicator;
+    NSSegmentedControl *_offsetModeSwitch = offsetModeSwitch;
+    NSButton *_stopButton = stopButton;
+    MVDataController *_dataController = dataController;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [_leftView self];
+        [_rightView self];
+        [_searchField self];
+        [_statusText self];
+        [_progressIndicator self];
+        [_offsetModeSwitch self];
+        [_stopButton self];
+        [_dataController self];
+    });
+}
+
 //----------------------------------------------------------------------------
 - (NSString *)windowNibName 
 {
