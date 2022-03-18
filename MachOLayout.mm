@@ -1524,6 +1524,15 @@ struct CompareSectionByName
   }
 }
 
++ (void)showAlert:(NSString *)string {
+    NSAlert *alert = [NSAlert alertWithMessageText:string
+                                     defaultButton:@"OK"
+                                   alternateButton:nil
+                                       otherButton:nil
+                         informativeTextWithFormat:@""];
+    [alert runModal];
+}
+
 //-----------------------------------------------------------------------------
 -(void)processLSDA
 {
@@ -1542,9 +1551,12 @@ struct CompareSectionByName
     struct section const * section = *sectIter;
     
     MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]];
-    NSParameterAssert(sectionNode != nil);
+//    NSParameterAssert(sectionNode != nil);
     if (sectionNode == nil)
-    { 
+    {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.class showAlert:@"__gcc_except_tab node not found"];
+        });
       return;
     }
     
@@ -1593,9 +1605,12 @@ struct CompareSectionByName
     struct section_64 const * section_64 = *sectIter;
     
     MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]];
-    NSParameterAssert(sectionNode != nil);
+//    NSParameterAssert(sectionNode != nil);
     if (sectionNode == nil)
     {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.class showAlert:@"__gcc_except_tab 64 node not found"];
+        });
       return;
     }
     
