@@ -3219,7 +3219,9 @@ struct message_ref64
 
 //------------------------------------------------------------------------------
 -(void)parseObjC2ClassPointers:(PointerVector const *)classes
+          NonLazyClassPointers:(PointerVector const *)nlClasses
               CategoryPointers:(PointerVector const *)categories
+       NonLazyCategoryPointers:(PointerVector const *)nlcategories
               ProtocolPointers:(PointerVector const *)protocols
 {
   MVNode * node = nil;
@@ -3239,6 +3241,21 @@ struct message_ref64
     }
   }
 
+    for (PointerVector::const_iterator iter = nlClasses->begin(); iter != nlClasses->end(); ++iter)
+    {
+      uint32_t const & rva = *iter;
+      if (rva && (node = [self sectionNodeContainsRVA:rva]))
+      {
+        uint32_t location = [self RVAToFileOffset:rva];
+        NSString * caption = [self findSymbolAtRVA:rva];
+        MATCH_STRUCT(class_t,location)
+        [self createObjC2ClassNode:node
+                           caption:caption
+                          location:location
+                             class:class_t];
+      }
+    }
+
   for (PointerVector::const_iterator iter = categories->begin(); iter != categories->end(); ++iter)
   {
     uint32_t const & rva = *iter;
@@ -3253,6 +3270,21 @@ struct message_ref64
                            category:category_t];
     }
   }
+
+    for (PointerVector::const_iterator iter = nlcategories->begin(); iter != nlcategories->end(); ++iter)
+    {
+      uint32_t const & rva = *iter;
+      if (rva && (node = [self sectionNodeContainsRVA:rva]))
+      {
+        uint32_t location = [self RVAToFileOffset:rva];
+        NSString * caption = [self findSymbolAtRVA:rva];
+        MATCH_STRUCT(category_t,location)
+        [self createObjC2CategoryNode:node
+                              caption:caption
+                             location:location
+                             category:category_t];
+      }
+    }
 
   for (PointerVector::const_iterator iter = protocols->begin(); iter != protocols->end(); ++iter)
   {
@@ -3273,7 +3305,9 @@ struct message_ref64
 
 //------------------------------------------------------------------------------
 -(void)parseObjC2Class64Pointers:(Pointer64Vector const *)classes
+          NonLazyClass64Pointers:(Pointer64Vector const *)nlClasses
               Category64Pointers:(Pointer64Vector const *)categories
+       NonLazyCategory64Pointers:(Pointer64Vector const *)nlcategories
               Protocol64Pointers:(Pointer64Vector const *)protocols
 {
   MVNode * node = nil;
@@ -3292,6 +3326,21 @@ struct message_ref64
                              class:class64_t];
     }
   }
+
+    for (Pointer64Vector::const_iterator iter = nlClasses->begin(); iter != nlClasses->end(); ++iter)
+    {
+      uint64_t const & rva64 = *iter;
+      if (rva64 && (node = [self sectionNodeContainsRVA64:rva64]))
+      {
+        uint32_t location = [self RVA64ToFileOffset:rva64];
+        NSString * caption = [self findSymbolAtRVA64:rva64];
+        MATCH_STRUCT(class64_t,location)
+        [self createObjC2Class64Node:node
+                             caption:caption
+                            location:location
+                               class:class64_t];
+      }
+    }
   
   for (Pointer64Vector::const_iterator iter = categories->begin(); iter != categories->end(); ++iter)
   {
@@ -3307,6 +3356,21 @@ struct message_ref64
                              category:category64_t];
     }
   }
+
+    for (Pointer64Vector::const_iterator iter = nlcategories->begin(); iter != nlcategories->end(); ++iter)
+    {
+      uint64_t const & rva64 = *iter;
+      if (rva64 && (node = [self sectionNodeContainsRVA64:rva64]))
+      {
+        uint32_t location = [self RVA64ToFileOffset:rva64];
+        NSString * caption = [self findSymbolAtRVA64:rva64];
+        MATCH_STRUCT(category64_t,location)
+        [self createObjC2Category64Node:node
+                                caption:caption
+                               location:location
+                               category:category64_t];
+      }
+    }
   
   for (Pointer64Vector::const_iterator iter = protocols->begin(); iter != protocols->end(); ++iter)
   {

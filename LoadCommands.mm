@@ -916,7 +916,7 @@ using namespace std;
   
   [node.details setAttributes:MVCellColorAttributeName,[NSColor greenColor],
                               MVUnderlineAttributeName,@"YES",nil];
-  
+#if !defined(__arm64__)
   MATCH_STRUCT(mach_header,imageOffset);
   if (mach_header->cputype == CPU_TYPE_I386 || mach_header->cputype == CPU_TYPE_X86_64)
   {
@@ -1127,6 +1127,7 @@ using namespace std;
 #pragma message "TODO: ARM64"
     }
   }
+#endif
   
   return node;
 }

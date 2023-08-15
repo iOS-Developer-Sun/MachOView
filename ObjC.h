@@ -67,11 +67,15 @@ typedef std::vector<uint64_t> Pointer64Vector;
                               length:(uint32_t)length;
 
 -(void)parseObjC2ClassPointers:(PointerVector const *)classes
+          NonLazyClassPointers:(PointerVector const *)nlClasses
               CategoryPointers:(PointerVector const *)categories
+       NonLazyCategoryPointers:(PointerVector const *)nlcategories
               ProtocolPointers:(PointerVector const *)protocols;
 
 -(void)parseObjC2Class64Pointers:(Pointer64Vector const *)classes
+          NonLazyClass64Pointers:(Pointer64Vector const *)nlClasses
               Category64Pointers:(Pointer64Vector const *)categories
+       NonLazyCategory64Pointers:(Pointer64Vector const *)nlcategories
               Protocol64Pointers:(Pointer64Vector const *)protocols;
 
 @end

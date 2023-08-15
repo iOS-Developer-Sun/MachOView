@@ -1645,9 +1645,11 @@ struct CompareSectionByName
 -(void)processObjcSections
 {
   PointerVector objcClassPointers;
+  PointerVector objcNonLazyClassPointers;
   PointerVector objcClassReferences;
   PointerVector objcSuperReferences;
   PointerVector objcCategoryPointers;
+  PointerVector objcNonLazyCategoryPointers;
   PointerVector objcProtocolPointers;
   
   NSString * lastNodeCaption;
@@ -1701,6 +1703,16 @@ struct CompareSectionByName
                                 pointers:objcCategoryPointers];
       }
 
+      section = [self findSectionByName:"__objc_nlcatlist" andSegment:"__DATA"];
+      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
+      {
+        [self createObjC2PointerListNode:sectionNode
+                                 caption:(lastNodeCaption = @"ObjC2 Non Lazy Category List")
+                                location:section->offset + imageOffset
+                                  length:section->size
+                                pointers:objcNonLazyCategoryPointers];
+      }
+
       section = [self findSectionByName:"__class_list" andSegment:"__OBJC2"];
       if (section == NULL)
         section = [self findSectionByName:"__objc_classlist" andSegment:"__DATA"];
@@ -1711,6 +1723,16 @@ struct CompareSectionByName
                                 location:section->offset + imageOffset 
                                   length:section->size
                                 pointers:objcClassPointers];
+      }
+
+      section = [self findSectionByName:"__objc_nlclslist" andSegment:"__DATA"];
+      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
+      {
+        [self createObjC2PointerListNode:sectionNode
+                                 caption:(lastNodeCaption = @"ObjC2 Non Lazy Class List")
+                                location:section->offset + imageOffset
+                                  length:section->size
+                                pointers:objcNonLazyClassPointers];
       }
       
       section = [self findSectionByName:"__class_refs" andSegment:"__OBJC2"];
@@ -1791,7 +1813,9 @@ struct CompareSectionByName
   @try
   {
     [self parseObjC2ClassPointers:&objcClassPointers
+             NonLazyClassPointers:&objcNonLazyClassPointers
                  CategoryPointers:&objcCategoryPointers
+          NonLazyCategoryPointers:&objcNonLazyCategoryPointers
                  ProtocolPointers:&objcProtocolPointers];
   }
   @catch(NSException * exception)
@@ -1804,9 +1828,11 @@ struct CompareSectionByName
 -(void)processObjcSections64
 {
   Pointer64Vector objcClassPointers;
+  Pointer64Vector objcNonLazyClassPointers;
   Pointer64Vector objcClassReferences;
   Pointer64Vector objcSuperReferences;
   Pointer64Vector objcCategoryPointers;
+  Pointer64Vector objcNonLazyCategoryPointers;
   Pointer64Vector objcProtocolPointers;
   
   NSString * lastNodeCaption;
@@ -1825,6 +1851,16 @@ struct CompareSectionByName
                                 location:section_64->offset + imageOffset 
                                   length:section_64->size
                                 pointers:objcClassPointers];
+    }
+
+    section_64 = [self findSection64ByName:"__objc_nlclslist" andSegment:"__DATA"];
+    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
+    {
+      [self createObjC2Pointer64ListNode:sectionNode
+                                 caption:(lastNodeCaption = @"ObjC2 Non Lazy Class List")
+                                location:section_64->offset + imageOffset
+                                  length:section_64->size
+                                pointers:objcNonLazyClassPointers];
     }
 
     section_64 = [self findSection64ByName:"__class_refs" andSegment:"__OBJC2"];
@@ -1861,6 +1897,16 @@ struct CompareSectionByName
                                 location:section_64->offset + imageOffset 
                                   length:section_64->size
                                 pointers:objcCategoryPointers];
+    }
+
+    section_64 = [self findSection64ByName:"__objc_nlcatlist" andSegment:"__DATA"];
+    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
+    {
+      [self createObjC2Pointer64ListNode:sectionNode
+                                 caption:(lastNodeCaption = @"ObjC2 Non Lazy Category List")
+                                location:section_64->offset + imageOffset
+                                  length:section_64->size
+                                pointers:objcNonLazyCategoryPointers];
     }
     
     section_64 = [self findSection64ByName:"__protocol_list" andSegment:"__OBJC2"];
@@ -1915,7 +1961,9 @@ struct CompareSectionByName
   @try
   {
     [self parseObjC2Class64Pointers:&objcClassPointers
+             NonLazyClass64Pointers:&objcNonLazyClassPointers
                  Category64Pointers:&objcCategoryPointers
+          NonLazyCategory64Pointers:&objcNonLazyCategoryPointers
                  Protocol64Pointers:&objcProtocolPointers];
   }
   @catch(NSException * exception)
