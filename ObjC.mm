@@ -2829,6 +2829,8 @@ struct message_ref64
   }
   
   MVNodeSaver nodeSaver;
+  MVNode * childNode = nil;
+
   node = [parent insertChildWithDetails:[@"ObjC2 Class: " stringByAppendingString:caption]
                                location:location
                                  length:sizeof(struct class_t)
@@ -2842,6 +2844,17 @@ struct message_ref64
                          :lastReadHex
                          :@"ISA"
                          :[self findSymbolAtRVA:class_t->isa]];
+
+    // Meta Class
+    if (class_t->isa && (childNode = [self sectionNodeContainsRVA64:class_t->isa])) {
+      uint32_t location = [self RVA64ToFileOffset:class_t->isa];
+      NSString * caption = [self findSymbolAtRVA64:class_t->isa];
+        MATCH_STRUCT(class_t,location)
+        [self createObjC2ClassNode:childNode
+                           caption:caption
+                          location:location
+                             class:class_t];
+    }
 
   [dataController read_uint32:range lastReadHex:&lastReadHex];
   [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
@@ -2866,9 +2879,7 @@ struct message_ref64
                          :lastReadHex
                          :@"Data"
                          :[self findSymbolAtRVA:class_t->data]];
-  
-  MVNode * childNode = nil;
-  
+
   // readonly data
   if (class_t->data && (childNode = [self sectionNodeContainsRVA:class_t->data]))
   {
@@ -2904,6 +2915,8 @@ struct message_ref64
   }
   
   MVNodeSaver nodeSaver;
+  MVNode * childNode = nil;
+
   node = [parent insertChildWithDetails:[@"ObjC2 Class64: " stringByAppendingString:caption]
                                location:location
                                  length:sizeof(struct class64_t)
@@ -2917,6 +2930,17 @@ struct message_ref64
                          :lastReadHex
                          :@"ISA"
                          :[self findSymbolAtRVA64:class64_t->isa]];
+
+    // Meta Class
+    if (class64_t->isa && (childNode = [self sectionNodeContainsRVA64:class64_t->isa])) {
+      uint32_t location = [self RVA64ToFileOffset:class64_t->isa];
+        NSString * caption = [self findSymbolAtRVA64:class64_t->isa];
+        MATCH_STRUCT(class64_t,location)
+        [self createObjC2Class64Node:childNode
+                             caption:caption
+                            location:location
+                               class:class64_t];
+    }
   
   [dataController read_uint64:range lastReadHex:&lastReadHex];
   [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
@@ -2941,9 +2965,7 @@ struct message_ref64
                          :lastReadHex
                          :@"Data"
                          :[self findSymbolAtRVA64:class64_t->data]];
-  
-  MVNode * childNode = nil;
-  
+
   // readonly data
   if (class64_t->data && (childNode = [self sectionNodeContainsRVA64:class64_t->data]))
   {
