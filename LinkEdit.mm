@@ -817,7 +817,7 @@ using namespace std;
                                 ? [NSString stringWithFormat:@"%u", nlist->n_value] : nlist->n_value == 0 ? @"0"
                                 : [NSString stringWithFormat:@"%u ($+%u)", nlist->n_value, nlist->n_value - section->addr]];
       
-      // fill in lookup table with defined sybols
+      // fill in lookup table with defined symbols
       if ((nlist->n_type & N_STAB) == 0)
       {
         // it is possible to associate more than one symbol to the same address.
@@ -839,7 +839,7 @@ using namespace std;
                              :@"Value"
                              :[NSString stringWithFormat:@"%u", nlist->n_value]];
       
-      // fill in lookup table with undefined sybols (key equals (-1) * index)
+      // fill in lookup table with undefined symbols (key equals (-1) * index)
       uint32_t key = *symbols.begin() - nlist - 1;
       [symbolNames setObject:symbolName
                       forKey:[NSNumber numberWithUnsignedLong:key]];
@@ -981,7 +981,7 @@ using namespace std;
                                 ? [NSString stringWithFormat:@"%qu", nlist_64->n_value] : nlist_64->n_value == 0 ? @"0"
                                 : [NSString stringWithFormat:@"%qu ($+%qu)", nlist_64->n_value, nlist_64->n_value - section_64->addr]];
       
-      // fill in lookup table with defined sybols
+      // fill in lookup table with defined symbols
       if ((nlist_64->n_type & N_STAB) == 0)
       {
         // it is possible to associate more than one symbol to the same address.
@@ -1003,7 +1003,7 @@ using namespace std;
                              :@"Value"
                              :[NSString stringWithFormat:@"%qu", nlist_64->n_value]];
       
-      // fill in lookup table with undefined sybols (key equals (-1) * index)
+      // fill in lookup table with undefined symbols (key equals (-1) * index)
       uint64_t key = *symbols_64.begin() - nlist_64 - 1;
       [symbolNames setObject:symbolName
                       forKey:[NSNumber numberWithUnsignedLongLong:key]];
@@ -1132,7 +1132,7 @@ using namespace std;
                                :@"Symbol"
                                :symbolName];
           
-        // fill in lookup table with indirect sybols
+        // fill in lookup table with indirect symbols
         [symbolNames setObject:[NSString stringWithFormat:@"[%@->%@]",
                                 [self findSymbolAtRVA:indirectAddress],symbolName]
                         forKey:[NSNumber numberWithUnsignedLong:indirectAddress]];
@@ -1175,7 +1175,7 @@ using namespace std;
           }
         }
 
-        // fill in lookup table with special indirect sybols
+        // fill in lookup table with special indirect symbols
         [symbolNames setObject:symbolName
                         forKey:[NSNumber numberWithUnsignedLong:indirectAddress]];
       }
@@ -1260,7 +1260,7 @@ using namespace std;
                                :@"Symbol"
                                :symbolName];
         
-        // fill in lookup table with indirect sybols
+        // fill in lookup table with indirect symbols
         [symbolNames setObject:[NSString stringWithFormat:@"[%@->%@]",
                                 [self findSymbolAtRVA64:indirectAddress],symbolName]
                         forKey:[NSNumber numberWithUnsignedLongLong:indirectAddress]];
@@ -1303,7 +1303,7 @@ using namespace std;
           }
         }
         
-        // fill in lookup table with special indirect sybols
+        // fill in lookup table with special indirect symbols
         [symbolNames setObject:symbolName
                         forKey:[NSNumber numberWithUnsignedLongLong:indirectAddress]];
       }
@@ -1831,7 +1831,8 @@ using namespace std;
     [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
                            :lastReadHex
                            :@"Offset"
-                           :[self findSymbolAtRVA:[self fileOffsetToRVA:data_in_code_entry->offset + imageOffset]]];
+                           :[self is64bit] ? [self findSymbolAtRVA64:[self fileOffsetToRVA64:data_in_code_entry->offset + imageOffset]] : [self findSymbolAtRVA:[self fileOffsetToRVA:data_in_code_entry->offset + imageOffset]]
+     ];
 
     [dataController read_uint16:range lastReadHex:&lastReadHex];
     [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]

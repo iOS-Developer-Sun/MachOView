@@ -324,6 +324,12 @@ _hex2int(char const * a, uint32_t len)
 - (NSDictionary *)sectionInfoForRVA:(uint32_t)rva
 {
   NSParameterAssert([self is64bit] == NO);
+
+  if(rva >= 0xffff0000) {
+    // bond external address
+    return nil;
+  }
+
   SectionInfoMap::iterator iter = sectionInfo.upper_bound(rva);
   if (iter == sectionInfo.begin())
   {
@@ -337,6 +343,12 @@ _hex2int(char const * a, uint32_t len)
 - (NSDictionary *)sectionInfoForRVA64:(uint64_t)rva64
 {
   NSParameterAssert([self is64bit] == YES);
+
+  if(rva64 >= 0xffffffff00000000) {
+    // bond external address
+    return nil;
+  }
+
   SectionInfoMap::iterator iter = sectionInfo.upper_bound(rva64);
   if (iter == sectionInfo.begin())
   {

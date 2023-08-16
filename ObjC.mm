@@ -2970,12 +2970,16 @@ struct message_ref64
   if (class64_t->data && (childNode = [self sectionNodeContainsRVA64:class64_t->data]))
   {
     uint32_t location = [self RVA64ToFileOffset:class64_t->data];
-    NSString * caption = [self findSymbolAtRVA64:class64_t->data];
-    MATCH_STRUCT(class64_ro_t,location)
-    [self createObjC2Class64RONode:childNode
-                           caption:caption
-                          location:location
-                           classRO:class64_ro_t];
+      if ((location & 0x1) == 0) {
+          NSString * caption = [self findSymbolAtRVA64:class64_t->data];
+          MATCH_STRUCT(class64_ro_t,location)
+          [self createObjC2Class64RONode:childNode
+                                 caption:caption
+                                location:location
+                                 classRO:class64_ro_t];
+      } else {
+          // TODO swift class
+      }
   }
   
   return node;
