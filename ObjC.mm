@@ -2669,6 +2669,9 @@ struct message_ref64
   {
     return nil;
   }
+
+  BOOL isSwift = location & 0x1;
+  location = location & ~0x1;
   
   // check for duplicates
   MVNode * node = [self entryInSectionNode:parent atLocation:location];
@@ -2678,7 +2681,7 @@ struct message_ref64
   }
   
   MVNodeSaver nodeSaver;
-  node = [parent insertChildWithDetails:[@"ObjC2 Class64 Info: " stringByAppendingString:caption]
+  node = [parent insertChildWithDetails:[isSwift ? @"Swift Class64 Info: " : @"ObjC2 Class64 Info: " stringByAppendingString:caption]
                                location:location 
                                  length:sizeof(struct class64_ro_t)
                                   saver:nodeSaver];
@@ -2964,7 +2967,7 @@ struct message_ref64
   [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
                          :lastReadHex
                          :@"Data"
-                         :[self findSymbolAtRVA64:class64_t->data]];
+                         :[self findSymbolAtRVA64:class64_t->data & ~0x1]];
 
   // readonly data
   if (class64_t->data && (childNode = [self sectionNodeContainsRVA64:class64_t->data]))
@@ -2978,7 +2981,12 @@ struct message_ref64
                                 location:location
                                  classRO:class64_ro_t];
       } else {
-          // TODO swift class
+          NSString * caption = [self findSymbolAtRVA64:class64_t->data & ~0x1];
+          MATCH_STRUCT(class64_ro_t,location & ~0x1)
+          [self createObjC2Class64RONode:childNode
+                                 caption:caption
+                                location:location
+                                 classRO:class64_ro_t];
       }
   }
   
