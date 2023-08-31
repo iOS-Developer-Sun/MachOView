@@ -715,6 +715,7 @@ _hex2int(char const * a, uint32_t len)
   struct linkedit_data_command const * code_signature = NULL;
   struct linkedit_data_command const * function_starts = NULL;
   struct linkedit_data_command const * data_in_code_entries = NULL;
+  struct linkedit_data_command const * chained_fixups = NULL;
   
   MATCH_STRUCT(mach_header_64,imageOffset);
   
@@ -755,6 +756,7 @@ _hex2int(char const * a, uint32_t len)
       case LC_CODE_SIGNATURE: code_signature = (struct linkedit_data_command const *)load_command; break;
       case LC_FUNCTION_STARTS: function_starts = (struct linkedit_data_command const *)load_command; break;
       case LC_DATA_IN_CODE: data_in_code_entries = (struct linkedit_data_command const *)load_command; break;
+      case LC_DYLD_CHAINED_FIXUPS: chained_fixups = (struct linkedit_data_command const *)load_command; break;
       default: ; // not interested
     }
   }
@@ -765,6 +767,7 @@ _hex2int(char const * a, uint32_t len)
   MVNode * segmentSplitInfoNode = nil;
   MVNode * functionStartsNode = nil;
   MVNode * dataInCodeEntriesNode = nil;
+  MVNode * chainedFixupsNode = nil;
 
   NSString * lastNodeCaption;
   
@@ -862,6 +865,14 @@ _hex2int(char const * a, uint32_t len)
                                         location:data_in_code_entries->dataoff + imageOffset
                                           length:data_in_code_entries->datasize];
   }
+
+    if (chained_fixups)
+    {
+        chainedFixupsNode = [self createDataNode:rootNode
+                                         caption:@"DYLD Chained Fixups"
+                                        location:chained_fixups->dataoff + imageOffset
+                                          length:chained_fixups->datasize];
+    }
   
   //============ Symbol Table ====================
   //==============================================
@@ -1017,6 +1028,21 @@ _hex2int(char const * a, uint32_t len)
       [self printException:exception caption:lastNodeCaption];
     }
   }
+
+    if (chainedFixupsNode && chainedFixupsNode.dataRange.length > 0)
+    {
+        @try
+        {
+            [self createChainedFixupsNode:chainedFixupsNode
+                                      caption:(lastNodeCaption = @"Chained Fixups")
+                                     location:chainedFixupsNode.dataRange.location
+                                       length:chainedFixupsNode.dataRange.length];
+        }
+        @catch(NSException * exception)
+        {
+            [self printException:exception caption:lastNodeCaption];
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -1963,6 +1989,15 @@ struct CompareSectionByName
                              location:section_64->offset + imageOffset 
                                length:section_64->size];
     }
+
+      section_64 = [self findSection64ByName:"__swift5_types" andSegment:"__TEXT"];
+      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
+      {
+        [self createSwiftTypes64Node:sectionNode
+                               caption:(lastNodeCaption = @"Swift 5 Types")
+                               location:section_64->offset + imageOffset
+                                 length:section_64->size];
+      }
   }
   @catch(NSException * exception)
   {

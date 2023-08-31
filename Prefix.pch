@@ -18,5 +18,6 @@
 #include <mach-o/ranlib.h>
 #include <mach-o/compact_unwind_encoding.h>
 #include <mach-o/swap.h>
+#include <mach-o/fixup-chains.h>
 
 #include <libkern/OSAtomic.h>

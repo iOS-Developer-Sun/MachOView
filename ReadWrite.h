@@ -40,6 +40,9 @@
 - (int64_t)     read_sleb128:(NSRange &)range lastReadHex:(NSString * __autoreleasing *)lastReadHex;
 - (uint64_t)    read_uleb128:(NSRange &)range lastReadHex:(NSString * __autoreleasing *)lastReadHex;
 
+- (uint32_t)    read_uint32_offset:(NSRange &)range  lastReadHex:(NSString * __autoreleasing *)lastReadHex;
+- (uint32_t)    read_uint32_offset:(NSRange &)range  lastReadHex:(NSString * __autoreleasing *)lastReadHex offset:(uint32_t *)offset;
+
 - (void)        write_uint8:(NSUInteger)location data:(uint8_t)data;
 - (void)        write_uint16:(NSUInteger)location data:(uint16_t)data;
 - (void)        write_uint32:(NSUInteger)location data:(uint32_t)data;

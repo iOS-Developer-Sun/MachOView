@@ -24,6 +24,11 @@ typedef std::vector<uint64_t> Pointer64Vector;
                              location:(uint32_t)location
                                length:(uint32_t)length;
 
+- (MVNode *)createSwiftTypes64Node:(MVNode *)parent
+                              caption:(NSString *)caption
+                             location:(uint32_t)location
+                               length:(uint32_t)length;
+
 - (MVNode *)createObjCImageInfoNode:(MVNode *)parent
                             caption:(NSString *)caption
                            location:(uint32_t)location

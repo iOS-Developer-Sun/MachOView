@@ -1856,4 +1856,63 @@ using namespace std;
   return node;
 }
 
+- (MVNode *) createChainedFixupsNode:parent
+                                 caption:(NSString *)caption
+                                location:(uint32_t)location
+                                  length:(uint32_t)length
+{
+    MVNodeSaver nodeSaver;
+    MVNode * node = [parent insertChildWithDetails:caption location:location length:length saver:nodeSaver];
+
+    NSRange range = NSMakeRange(location,0);
+    NSString * lastReadHex;
+//    while (NSMaxRange(range) < location + length);
+
+    MATCH_STRUCT(dyld_chained_fixups_header, NSMaxRange(range))
+    [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Fixups Version"
+                           :[NSString stringWithFormat:@"%u", dyld_chained_fixups_header->fixups_version]
+    ];
+
+    [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Starts Offset"
+                           :[NSString stringWithFormat:@"%u", (uint32_t)dyld_chained_fixups_header->starts_offset]];
+
+    [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Imports Offset"
+                           :[NSString stringWithFormat:@"%u", (uint32_t)dyld_chained_fixups_header->imports_offset]];
+
+    [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Symbols Offset"
+                           :[NSString stringWithFormat:@"%u", (uint32_t)dyld_chained_fixups_header->symbols_offset]];
+
+    [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Imports Count"
+                           :[NSString stringWithFormat:@"%u", (uint32_t)dyld_chained_fixups_header->imports_count]];
+
+    [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Imports Format"
+                           :[NSString stringWithFormat:@"%u", (uint32_t)dyld_chained_fixups_header->imports_format]];
+
+    [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Symbols Format"
+                           :[NSString stringWithFormat:@"%u", (uint32_t)dyld_chained_fixups_header->symbols_format]];
+
+    return node;
+}
+
 @end

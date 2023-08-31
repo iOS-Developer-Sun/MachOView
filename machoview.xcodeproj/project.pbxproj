@@ -209,6 +209,7 @@
 		7B7828BD1A1E017B00AE03DB /* SStream.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SStream.h; sourceTree = "<group>"; };
 		7B7828BE1A1E017B00AE03DB /* utils.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = utils.c; sourceTree = "<group>"; };
 		7B7828BF1A1E017B00AE03DB /* utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = utils.h; sourceTree = "<group>"; };
+		C0745CC62AA0510200C5FECA /* fixup-chains.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "fixup-chains.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -351,6 +352,7 @@
 				3CDFB35E139F603C00F46F18 /* arm */,
 				3CDFB360139F603C00F46F18 /* compact_unwind_encoding.h */,
 				3CDFB361139F603C00F46F18 /* fat.h */,
+				C0745CC62AA0510200C5FECA /* fixup-chains.h */,
 				3CDFB362139F603C00F46F18 /* loader.h */,
 				3CDFB363139F603C00F46F18 /* nlist.h */,
 				3CDFB364139F603C00F46F18 /* ranlib.h */,

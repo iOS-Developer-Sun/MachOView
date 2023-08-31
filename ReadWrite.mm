@@ -228,6 +228,20 @@
   return result;
 }
 
+- (uint32_t)    read_uint32_offset:(NSRange &)range  lastReadHex:(NSString * __autoreleasing *)lastReadHex {
+    return [self read_uint32_offset:range lastReadHex:lastReadHex offset:NULL];
+}
+
+- (uint32_t)    read_uint32_offset:(NSRange &)range  lastReadHex:(NSString * __autoreleasing *)lastReadHex offset:(uint32_t *)offset {
+    int32_t value = [self read_int32:range lastReadHex:lastReadHex];
+    uint32_t ret = (uint32_t)range.location + value;
+    if (offset) {
+        *offset = value;
+    }
+    return ret;
+}
+
+
 // ----------------------------------------------------------------------------
 - (void) write_uint8:(NSUInteger)location data:(uint8_t)data
 {

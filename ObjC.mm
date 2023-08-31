@@ -19,6 +19,14 @@
 #define RO_META                     (1<<0)
 #define RO_ROOT                     (1<<1)
 #define RO_HAS_CXX_STRUCTORS        (1<<2)
+#define RO_HAS_LOAD_METHOD          (1<<3)
+#define RO_HIDDEN                   (1<<4)
+#define RO_EXCEPTION                (1<<5)
+#define RO_HAS_SWIFT_INITIALIZER    (1<<6)
+#define RO_IS_ARC                   (1<<7)
+#define RO_HAS_CXX_DTOR_ONLY        (1<<8)
+#define RO_HAS_WEAK_WITHOUT_ARC     (1<<9)
+#define RO_FORBIDS_ASSOCIATED_OBJECTS (1<<10)
 
 using namespace std;
 
@@ -330,6 +338,190 @@ struct message_ref64
   uint64_t sel;               // SEL (64-bit pointer)
 };
 
+struct swift_type
+{
+    uint32_t flags;
+    int32_t parent;
+};
+
+struct swift_type_module
+{
+    uint32_t flags;
+    int32_t parent;
+    int32_t name;
+};
+
+struct swift_vtable_descriptor_header
+{
+    uint32_t offset;
+    uint32_t size;
+};
+
+struct swift_vtable_descriptor
+{
+    uint32_t flags;
+    int32_t imp;
+};
+
+struct swift_type_class
+{
+    uint32_t flags;
+    int32_t parent;
+    int32_t name;
+    int32_t access_function;
+    int32_t field_descriptor;
+    uint32_t superclass_type;
+    uint32_t negative_size;
+    uint32_t positive_size;
+    uint32_t number_of_immediate_members;
+    uint32_t number_of_fields;
+    uint32_t field_offset_vector_offset;
+
+    // optional
+    int32_t resilient_superclass;
+    int32_t metadataInitialization[3];
+    struct swift_vtable_descriptor_header vtable;
+    struct swift_vtable_descriptor methods[0];
+};
+
+struct swift_type_struct
+{
+    uint32_t flags;
+    int32_t parent;
+    int32_t name;
+    int32_t access_function;
+    int32_t field_descriptor;
+    uint32_t number_of_fields;
+    uint32_t field_offset_vector_offset;
+};
+
+#define SWIFT_VTABLE_DESCRIPTOR_MASK_KIND (0x0F)
+#define SWIFT_VTABLE_DESCRIPTOR_MASK_IS_INSTANCE (0x10)
+#define SWIFT_VTABLE_DESCRIPTOR_MASK_IS_DYNAMIC (0x20)
+
+enum swift_method_kind {
+    swift_method_kind_method,
+    swift_method_kind_init,
+    swift_method_kind_getter,
+    swift_method_kind_setter,
+    swift_method_kind_modifyCoroutine,
+    swift_method_kind_readCoroutine,
+};
+
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_MODULE 0
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_EXTENSION 1
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_ANONYMOUS 2
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_PROTOCOL 3
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_OPAQUE_TYPE 4
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_CLASS 16
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_STRUCT 17
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_ENUM 18
+#define SWIFT_CONTEXT_DESCRIPTOR_KIND_ANY 31
+
+enum {
+    // All of these values are bit offsets or widths.
+    // Generic flags build upwards from 0.
+    // Type-specific flags build downwards from 15.
+
+    /// Whether there's something unusual about how the metadata is
+    /// initialized.
+    ///
+    /// Meaningful for all type-descriptor kinds.
+    MetadataInitialization = 0,
+    MetadataInitialization_width = 2,
+
+    /// Set if the type has extended import information.
+    ///
+    /// If true, a sequence of strings follow the null terminator in the
+    /// descriptor, terminated by an empty string (i.e. by two null
+    /// terminators in a row).  See TypeImportInfo for the details of
+    /// these strings and the order in which they appear.
+    ///
+    /// Meaningful for all type-descriptor kinds.
+    HasImportInfo = 2,
+
+    /// Set if the type descriptor has a pointer to a list of canonical
+    /// prespecializations.
+    HasCanonicalMetadataPrespecializations = 3,
+
+    /// Set if the metadata contains a pointer to a layout string
+    HasLayoutString = 4,
+
+    // Type-specific flags:
+
+    /// Set if the class is an actor.
+    ///
+    /// Only meaningful for class descriptors.
+    Class_IsActor = 7,
+
+    /// Set if the class is a default actor class.  Note that this is
+    /// based on the best knowledge available to the class; actor
+    /// classes with resilient superclassess might be default actors
+    /// without knowing it.
+    ///
+    /// Only meaningful for class descriptors.
+    Class_IsDefaultActor = 8,
+
+    /// The kind of reference that this class makes to its resilient superclass
+    /// descriptor.  A TypeReferenceKind.
+    ///
+    /// Only meaningful for class descriptors.
+    Class_ResilientSuperclassReferenceKind = 9,
+    Class_ResilientSuperclassReferenceKind_width = 3,
+
+    /// Whether the immediate class members in this metadata are allocated
+    /// at negative offsets.  For now, we don't use this.
+    Class_AreImmediateMembersNegative = 12,
+
+    /// Set if the context descriptor is for a class with resilient ancestry.
+    ///
+    /// Only meaningful for class descriptors.
+    Class_HasResilientSuperclass = 13,
+
+    /// Set if the context descriptor includes metadata for dynamically
+    /// installing method overrides at metadata instantiation time.
+    Class_HasOverrideTable = 14,
+
+    /// Set if the context descriptor includes metadata for dynamically
+    /// constructing a class's vtables at metadata instantiation time.
+    ///
+    /// Only meaningful for class descriptors.
+    Class_HasVTable = 15,
+};
+
+enum MetadataInitializationKind {
+  /// There are either no special rules for initializing the metadata
+  /// or the metadata is generic.  (Genericity is set in the
+  /// non-kind-specific descriptor flags.)
+  NoMetadataInitialization = 0,
+
+  /// The type requires non-trivial singleton initialization using the
+  /// "in-place" code pattern.
+  SingletonMetadataInitialization = 1,
+
+  /// The type requires non-trivial singleton initialization using the
+  /// "foreign" code pattern.
+  ForeignMetadataInitialization = 2,
+
+  // We only have two bits here, so if you add a third special kind,
+  // include more flag bits in its out-of-line storage.
+};
+
+struct swift_field_record {
+    uint32_t flags;
+    int32_t name;
+    int32_t fieldname;
+};
+
+struct swift_field_descriptor
+{
+    int32_t type_name;
+    int32_t superclass;
+    uint16_t kind;
+    uint16_t field_record_size;
+    uint32_t number_of_records;
+    struct swift_field_record records[0];
+};
 
 //--------------------- Predeclarations ----------------------------------------
 
@@ -500,6 +692,47 @@ struct message_ref64
   }
   
   return node;
+}
+
+//------------------------------------------------------------------------------
+- (MVNode *)createSwiftTypes64Node:(MVNode *)parent
+                           caption:(NSString *)caption
+                          location:(uint32_t)location
+                            length:(uint32_t)length
+{
+    MVNodeSaver nodeSaver;
+    MVNode * node = [parent insertChildWithDetails:caption location:location length:length saver:nodeSaver];
+
+    NSRange range = NSMakeRange(location,0);
+    NSString * lastReadHex;
+
+    while (NSMaxRange(range) < location + length)
+    {
+        uint64_t offset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex];
+        uint64_t address = [self fileOffsetToRVA64:offset];
+
+        NSString * caption = [self findSymbolAtRVA64:address];
+
+        [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                               :lastReadHex
+                               :@"Pointer"
+                               :caption];
+        [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+
+        MVNode * childNode = nil;
+
+        if (address && (childNode = [self sectionNodeContainsRVA64:address]))
+        {
+            uint32_t location = [self RVA64ToFileOffset:address];
+            MATCH_STRUCT(swift_type,location)
+            [self createSwiftType64Node:childNode
+                                caption:caption
+                               location:location
+                              swiftType:swift_type];
+        }
+    }
+
+    return node;
 }
 
 //------------------------------------------------------------------------------
@@ -2550,6 +2783,14 @@ struct message_ref64
   if (class_ro_t->flags & RO_META) [node.details appendRow:@"":@"":@"0x1":@"RO_META"];
   if (class_ro_t->flags & RO_ROOT) [node.details appendRow:@"":@"":@"0x2":@"RO_ROOT"];
   if (class_ro_t->flags & RO_HAS_CXX_STRUCTORS) [node.details appendRow:@"":@"":@"0x4":@"RO_HAS_CXX_STRUCTORS"];
+  if (class_ro_t->flags & RO_HAS_LOAD_METHOD) [node.details appendRow:@"":@"":@"0x8":@"RO_HAS_LOAD_METHOD"];
+  if (class_ro_t->flags & RO_HIDDEN) [node.details appendRow:@"":@"":@"0x10":@"RO_HIDDEN"];
+  if (class_ro_t->flags & RO_EXCEPTION) [node.details appendRow:@"":@"":@"0x20":@"RO_EXCEPTION"];
+  if (class_ro_t->flags & RO_HAS_SWIFT_INITIALIZER) [node.details appendRow:@"":@"":@"0x40":@"RO_HAS_SWIFT_INITIALIZER"];
+  if (class_ro_t->flags & RO_IS_ARC) [node.details appendRow:@"":@"":@"0x80":@"RO_IS_ARC"];
+  if (class_ro_t->flags & RO_HAS_CXX_DTOR_ONLY) [node.details appendRow:@"":@"":@"0x100":@"RO_HAS_CXX_DTOR_ONLY"];
+  if (class_ro_t->flags & RO_HAS_WEAK_WITHOUT_ARC) [node.details appendRow:@"":@"":@"0x200":@"RO_HAS_WEAK_WITHOUT_ARC"];
+  if (class_ro_t->flags & RO_FORBIDS_ASSOCIATED_OBJECTS) [node.details appendRow:@"":@"":@"0x400":@"RO_FORBIDS_ASSOCIATED_OBJECTS"];
 
   [dataController read_uint32:range lastReadHex:&lastReadHex];
   [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
@@ -2670,9 +2911,6 @@ struct message_ref64
     return nil;
   }
 
-  BOOL isSwift = location & 0x1;
-  location = location & ~0x1;
-  
   // check for duplicates
   MVNode * node = [self entryInSectionNode:parent atLocation:location];
   if (node != nil)
@@ -2681,7 +2919,7 @@ struct message_ref64
   }
   
   MVNodeSaver nodeSaver;
-  node = [parent insertChildWithDetails:[isSwift ? @"Swift Class64 Info: " : @"ObjC2 Class64 Info: " stringByAppendingString:caption]
+  node = [parent insertChildWithDetails:[@"ObjC2 Class64 Info: " stringByAppendingString:caption]
                                location:location 
                                  length:sizeof(struct class64_ro_t)
                                   saver:nodeSaver];
@@ -2698,7 +2936,15 @@ struct message_ref64
   if (class64_ro_t->flags & RO_META) [node.details appendRow:@"":@"":@"0x1":@"RO_META"];
   if (class64_ro_t->flags & RO_ROOT) [node.details appendRow:@"":@"":@"0x2":@"RO_ROOT"];
   if (class64_ro_t->flags & RO_HAS_CXX_STRUCTORS) [node.details appendRow:@"":@"":@"0x4":@"RO_HAS_CXX_STRUCTORS"];
-  
+  if (class64_ro_t->flags & RO_HAS_LOAD_METHOD) [node.details appendRow:@"":@"":@"0x8":@"RO_HAS_LOAD_METHOD"];
+  if (class64_ro_t->flags & RO_HIDDEN) [node.details appendRow:@"":@"":@"0x10":@"RO_HIDDEN"];
+  if (class64_ro_t->flags & RO_EXCEPTION) [node.details appendRow:@"":@"":@"0x20":@"RO_EXCEPTION"];
+  if (class64_ro_t->flags & RO_HAS_SWIFT_INITIALIZER) [node.details appendRow:@"":@"":@"0x40":@"RO_HAS_SWIFT_INITIALIZER"];
+  if (class64_ro_t->flags & RO_IS_ARC) [node.details appendRow:@"":@"":@"0x80":@"RO_IS_ARC"];
+  if (class64_ro_t->flags & RO_HAS_CXX_DTOR_ONLY) [node.details appendRow:@"":@"":@"0x100":@"RO_HAS_CXX_DTOR_ONLY"];
+  if (class64_ro_t->flags & RO_HAS_WEAK_WITHOUT_ARC) [node.details appendRow:@"":@"":@"0x200":@"RO_HAS_WEAK_WITHOUT_ARC"];
+  if (class64_ro_t->flags & RO_FORBIDS_ASSOCIATED_OBJECTS) [node.details appendRow:@"":@"":@"0x400":@"RO_FORBIDS_ASSOCIATED_OBJECTS"];
+
   [dataController read_uint32:range lastReadHex:&lastReadHex];
   [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
                          :lastReadHex
@@ -2985,7 +3231,7 @@ struct message_ref64
           MATCH_STRUCT(class64_ro_t,location & ~0x1)
           [self createObjC2Class64RONode:childNode
                                  caption:caption
-                                location:location
+                                location:location & ~0x1
                                  classRO:class64_ro_t];
       }
   }
@@ -3249,6 +3495,408 @@ struct message_ref64
   }
   
   return node;
+}
+
+//------------------------------------------------------------------------------
+- (MVNode *)createSwiftType64Node:(MVNode *)parent
+                              caption:(NSString *)caption
+                             location:(uint32_t)location
+                             swiftType:(struct swift_type const *)swiftType
+{
+        // check for parent
+    if (parent == nil)
+    {
+        return nil;
+    }
+
+        // check for duplicates
+    MVNode * node = [self entryInSectionNode:parent atLocation:location];
+    if (node != nil)
+    {
+        return node;
+    }
+
+    uint32_t length = 0;
+    {
+        uint8_t kind = swiftType->flags & 0x1F;
+        if (kind == SWIFT_CONTEXT_DESCRIPTOR_KIND_CLASS) {
+            length = sizeof(struct swift_type_class);
+        } else if (kind == SWIFT_CONTEXT_DESCRIPTOR_KIND_STRUCT) {
+            length = sizeof(struct swift_type_struct);
+        } else {
+            length = sizeof(struct swift_type);
+        }
+    }
+
+    MVNodeSaver nodeSaver;
+    node = [parent insertChildWithDetails:[@"Swift Type: " stringByAppendingString:caption]
+                                 location:location
+                                   length:length
+                                    saver:nodeSaver];
+
+    NSRange range = NSMakeRange(location,0);
+    NSString * lastReadHex;
+
+    uint32_t flags = [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Flags"
+                           :lastReadHex];
+
+    uint8_t kind = flags & 0x1F;
+    NSString *kindString = nil;
+    switch (kind) {
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_MODULE: {
+            kindString = @"Module";
+        } break;
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_EXTENSION: {
+            kindString = @"Extension";
+        } break;
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_ANONYMOUS: {
+            kindString = @"Anonymous";
+        } break;
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_PROTOCOL: {
+            kindString = @"Protocol";
+        } break;
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_OPAQUE_TYPE: {
+            kindString = @"OpaqueType";
+        } break;
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_CLASS: {
+            kindString = @"Class";
+        } break;
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_STRUCT: {
+            kindString = @"Struct";
+        } break;
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_ENUM: {
+            kindString = @"Enum";
+        } break;
+        case SWIFT_CONTEXT_DESCRIPTOR_KIND_ANY: {
+            kindString = @"Any";
+        } break;
+        default: {
+            kindString = @"Unknown";
+        } break;
+    }
+    [node.details appendRow:@"":@"":@"0x1F":[NSString stringWithFormat:@"KIND(%.2lX)(%@)", kind, kindString]];
+
+    if (flags & 0x80) [node.details appendRow:@"":@"":@"0x80":@"IS_GENERIC"];
+    if (flags & 0x40) [node.details appendRow:@"":@"":@"0x40":@"IS_UNIQUE"];
+    if ((flags >> 8) & 0xFF) [node.details appendRow:@"":@"":@"0xFF00":[NSString stringWithFormat:@"VERSION(%.2lX)", (flags >> 8) & 0xFF]];
+    uint16_t descriptorFlags = (flags >> 16) & 0xFFFF;
+    if (descriptorFlags) [node.details appendRow:@"":@"":@"0xFFFF0000":[NSString stringWithFormat:@"KIND_SPECIFIC_FLAGS(%.4lX)", descriptorFlags]];
+
+    uint8_t metadataInitializationFlag = descriptorFlags & 0x3;
+    if (metadataInitializationFlag == NoMetadataInitialization) {
+        [node.details appendRow:@"":@"":@"0x00030000":@"No Metadata Initialization"];
+    } else if (metadataInitializationFlag == SingletonMetadataInitialization) {
+        [node.details appendRow:@"":@"":@"0x00030000":@"Singleton Metadata Initialization"];
+    } else if (metadataInitializationFlag == ForeignMetadataInitialization) {
+        [node.details appendRow:@"":@"":@"0x00030000":@"Foreign Metadata Initialization"];
+    }
+    if (descriptorFlags & (1 << HasImportInfo))
+        [node.details appendRow:@"":@"":@"0x00100000":@"Has Import Info"];
+    if (descriptorFlags & (1 << HasCanonicalMetadataPrespecializations))
+        [node.details appendRow:@"":@"":@"0x00100000":@"Has Canonical Metadata Prespecializations"];
+    if (descriptorFlags & (1 << HasLayoutString))
+        [node.details appendRow:@"":@"":@"0x00100000":@"Has Layout String"];
+    if (descriptorFlags & (1 << Class_IsActor))
+        [node.details appendRow:@"":@"":@"0x00800000":@"Class Is Actor"];
+    if (descriptorFlags & (1 << Class_IsDefaultActor))
+        [node.details appendRow:@"":@"":@"0x01000000":@"Class Is Default Actor"];
+    if (descriptorFlags & (1 << Class_AreImmediateMembersNegative))
+        [node.details appendRow:@"":@"":@"0x10000000":@"Class Are Immediate Members Negative"];
+    BOOL hasResilientSuperclass = descriptorFlags & (1 << Class_HasResilientSuperclass);
+    if (hasResilientSuperclass)
+        [node.details appendRow:@"":@"":@"0x20000000":@"Class Has Resilient Superclass"];
+    if (descriptorFlags & (1 << Class_HasOverrideTable))
+        [node.details appendRow:@"":@"":@"0x40000000":@"Class Has Override Table"];
+    BOOL hasVTable = descriptorFlags & (1 << Class_HasVTable);
+    if (hasVTable)
+        [node.details appendRow:@"":@"":@"0x80000000":@"Class Has VTable"];
+
+    uint32_t parentOffsetValue = 0;
+    uint32_t parentOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex offset:&parentOffsetValue];
+    uint64_t parentAddress = [self fileOffsetToRVA64:parentOffset];
+
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Parent"
+                           :parentOffsetValue ? [self findSymbolAtRVA64:parentAddress] : @"00000000"];
+
+    MVNode * childNode = nil;
+    if (parentOffsetValue && parentAddress && (childNode = [self sectionNodeContainsRVA64:parentAddress]))
+    {
+        uint32_t location = [self RVA64ToFileOffset:parentAddress];
+        NSString * caption = [self findSymbolAtRVA64:parentAddress];
+        MATCH_STRUCT(swift_type,location)
+        [self createSwiftType64Node:childNode
+                            caption:caption
+                           location:location
+                          swiftType:swift_type];
+    }
+
+    if (kind == SWIFT_CONTEXT_DESCRIPTOR_KIND_MODULE ||
+        kind == SWIFT_CONTEXT_DESCRIPTOR_KIND_CLASS ||
+        kind == SWIFT_CONTEXT_DESCRIPTOR_KIND_STRUCT ||
+        kind == SWIFT_CONTEXT_DESCRIPTOR_KIND_ENUM) {
+        uint32_t nameOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex];
+        uint64_t nameAddress = [self fileOffsetToRVA64:nameOffset];
+        const char *name = (const char *)[self imageAt:nameOffset];
+        [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                               :lastReadHex
+                               :@"Name"
+                               :[NSString stringWithFormat:@"0x%.8lX(%s)", nameAddress, name]];
+
+        if (kind == SWIFT_CONTEXT_DESCRIPTOR_KIND_CLASS) {
+            uint32_t functionOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex];
+            uint64_t functionAddress = [self fileOffsetToRVA64:functionOffset];
+            [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                   :lastReadHex
+                                   :@"Access Function"
+                                   :[self findSymbolAtRVA64:functionAddress]];
+
+            uint32_t fdOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex];
+            uint64_t fdAddress = [self fileOffsetToRVA64:fdOffset];
+            [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                   :lastReadHex
+                                   :@"Field Descriptor"
+                                   :[self findSymbolAtRVA64:fdAddress]];
+
+            if (fdAddress && (childNode = [self sectionNodeContainsRVA64:fdAddress]))
+            {
+                uint32_t location = [self RVA64ToFileOffset:fdAddress];
+                NSString * caption = [self findSymbolAtRVA64:fdAddress];
+                MATCH_STRUCT(swift_field_descriptor,location)
+                [self createSwiftFieldDescriptorNode:childNode
+                                             caption:caption
+                                            location:location
+                                     filedDescriptor:swift_field_descriptor];
+            }
+
+            if (kind == SWIFT_CONTEXT_DESCRIPTOR_KIND_CLASS) {
+                uint32_t superclassOffsetValue = 0;
+                uint32_t superclassOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex offset:&superclassOffsetValue];
+                uint64_t superclassAddress = [self fileOffsetToRVA64:superclassOffset];
+                NSString *superclassDescription = @"00000000";
+                if (superclassOffsetValue) {
+                    const char *superclassname = (const char *)[self imageAt:superclassOffset];
+                    superclassDescription = [NSString stringWithFormat:@"0x%.8llX(%s)", superclassAddress, superclassname];
+                }
+                [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                       :lastReadHex
+                                       :@"Super Class"
+                                       :superclassDescription];
+
+                uint32_t negativeSize = [dataController read_uint32:range lastReadHex:&lastReadHex];
+                [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                       :lastReadHex
+                                       :@"Negative Size"
+                                       :[NSString stringWithFormat:@"%u", negativeSize]];
+
+                uint32_t positiveSize = [dataController read_uint32:range lastReadHex:&lastReadHex];
+                [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                       :lastReadHex
+                                       :@"Positive Size"
+                                       :[NSString stringWithFormat:@"%u", positiveSize]];
+
+                uint32_t numberOfImmediateMembers = [dataController read_uint32:range lastReadHex:&lastReadHex];
+                [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                       :lastReadHex
+                                       :@"Number of Immediate Members"
+                                       :[NSString stringWithFormat:@"%u", numberOfImmediateMembers]];
+
+                uint32_t numberOfFields = [dataController read_uint32:range lastReadHex:&lastReadHex];
+                [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                       :lastReadHex
+                                       :@"Number of Fields"
+                                       :[NSString stringWithFormat:@"%u", numberOfFields]];
+
+                uint32_t fieldOffsetVectorOffset = [dataController read_uint32:range lastReadHex:&lastReadHex];
+                [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                       :lastReadHex
+                                       :@"Field Offset Vector Offset"
+                                       :[NSString stringWithFormat:@"%u", fieldOffsetVectorOffset]];
+                if (hasResilientSuperclass) {
+                    uint32_t resilientSuperclassOffsetValue = 0;
+                    uint32_t resilientSuperclassOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex offset:&resilientSuperclassOffsetValue];
+                    uint64_t resilientSuperclassAddress = [self fileOffsetToRVA64:resilientSuperclassOffset];
+                    NSString *resilientSuperclassDescription = @"00000000";
+                    if (resilientSuperclassOffsetValue) {
+                        const char *superclassname = (const char *)[self imageAt:resilientSuperclassOffset];
+                        resilientSuperclassDescription = [NSString stringWithFormat:@"0x%.8llX(%s)", resilientSuperclassAddress, superclassname];
+                    }
+                    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                           :lastReadHex
+                                           :@"Resilient Super Class"
+                                           :resilientSuperclassDescription];
+                }
+                if (metadataInitializationFlag) {
+                    [dataController read_bytes:range length:12 lastReadHex:&lastReadHex];
+                    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                           :lastReadHex
+                                           :@"Metadata Initialization"
+                                           :@""];
+                }
+
+                if (hasVTable) {
+                    uint32_t vTableHeaderOffset = [dataController read_uint32:range lastReadHex:&lastReadHex];
+                    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                           :lastReadHex
+                                           :@"vTableHeaderOffset"
+                                           :[NSString stringWithFormat:@"%u", vTableHeaderOffset]];
+
+                    uint32_t vTableHeaderSize = [dataController read_uint32:range lastReadHex:&lastReadHex];
+                    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                           :lastReadHex
+                                           :@"vTable Method Count"
+                                           :[NSString stringWithFormat:@"%u", vTableHeaderSize]];
+
+                    for (uint32_t i = 0; i < vTableHeaderSize; i++) {
+                        [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+
+                        uint32_t flags = [dataController read_uint32:range lastReadHex:&lastReadHex];
+                        [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                               :lastReadHex
+                                               :@"Flags"
+                                               :[NSString stringWithFormat:@"%.8X", flags]];
+
+                        if ((flags & SWIFT_VTABLE_DESCRIPTOR_MASK_KIND) == swift_method_kind_method) {
+                            [node.details appendRow:@"":@"":@"0x0":@"Method"];
+                        } else if ((flags & SWIFT_VTABLE_DESCRIPTOR_MASK_KIND) == swift_method_kind_init) {
+                            [node.details appendRow:@"":@"":@"0x1":@"Init"];
+                        } else if ((flags & SWIFT_VTABLE_DESCRIPTOR_MASK_KIND) == swift_method_kind_getter) {
+                            [node.details appendRow:@"":@"":@"0x2":@"Getter"];
+                        } else if ((flags & SWIFT_VTABLE_DESCRIPTOR_MASK_KIND) == swift_method_kind_setter) {
+                            [node.details appendRow:@"":@"":@"0x3":@"Setter"];
+                        } else if ((flags & SWIFT_VTABLE_DESCRIPTOR_MASK_KIND) == swift_method_kind_modifyCoroutine) {
+                            [node.details appendRow:@"":@"":@"0x4":@"Modify Coroutine"];
+                        } else if ((flags & SWIFT_VTABLE_DESCRIPTOR_MASK_KIND) == swift_method_kind_readCoroutine) {
+                            [node.details appendRow:@"":@"":@"0x5":@"Read Coroutine"];
+                        }
+
+                        if ((flags & SWIFT_VTABLE_DESCRIPTOR_MASK_IS_INSTANCE)) {
+                            [node.details appendRow:@"":@"":@"0x10":@"Instance"];
+                        }
+                        if ((flags & SWIFT_VTABLE_DESCRIPTOR_MASK_IS_DYNAMIC)) {
+                            [node.details appendRow:@"":@"":@"0x20":@"Dynamic"];
+                        }
+
+                        uint32_t impValue = 0;
+                        uint32_t impOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex offset:&impValue];
+                        NSString *symbolName = @"00000000";
+                        if (impValue) {
+                            uint64_t impAddress = [self fileOffsetToRVA64:impOffset];
+                            symbolName = [self findSymbolAtRVA64:impAddress];
+                        }
+                        [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                               :lastReadHex
+                                               :@"Implementation"
+                                               :symbolName];
+                    }
+                }
+            }
+        }
+    }
+
+    return node;
+}
+
+//------------------------------------------------------------------------------
+- (MVNode *)createSwiftFieldDescriptorNode:(MVNode *)parent
+                                   caption:(NSString *)caption
+                                  location:(uint32_t)location
+                           filedDescriptor:(struct swift_field_descriptor const *)filedDescriptor
+{
+        // check for parent
+    if (parent == nil)
+    {
+        return nil;
+    }
+
+        // check for duplicates
+    MVNode * node = [self entryInSectionNode:parent atLocation:location];
+    if (node != nil)
+    {
+        return node;
+    }
+
+    MVNodeSaver nodeSaver;
+    node = [parent insertChildWithDetails:[@"Swift Field Descriptor: " stringByAppendingString:caption]
+                                 location:location
+                                   length:sizeof(struct swift_field_descriptor) + sizeof(struct swift_field_record) * filedDescriptor->number_of_records
+                                    saver:nodeSaver];
+
+    NSRange range = NSMakeRange(location,0);
+    NSString * lastReadHex;
+
+    uint32_t typeNameOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex];
+    uint64_t typeNameAddress = [self fileOffsetToRVA64:typeNameOffset];
+    const char *typeName = (const char *)[self imageAt:typeNameOffset];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Type Name"
+                           :[NSString stringWithFormat:@"0x%.8lX(%s)", typeNameAddress, typeName]];
+
+    uint32_t superclassValue = 0;
+    uint32_t superclassOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex offset:&superclassValue];
+    NSString *superclassDescription = @"00000000";
+    if (superclassValue) {
+        uint64_t superclassAddress = [self fileOffsetToRVA64:superclassOffset];
+        const char *superclassName = (const char *)[self imageAt:superclassOffset];
+        superclassDescription = [NSString stringWithFormat:@"0x%.8lX(%s)", superclassAddress, superclassName];
+    }
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Super Class"
+                           :superclassDescription];
+
+    uint32_t kind = [dataController read_uint16:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Kind"
+                           :[NSString stringWithFormat:@"%.4lX", kind]];
+
+    uint32_t fieldRecordSize = [dataController read_uint16:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Record Size"
+                           :[NSString stringWithFormat:@"%.4lX", fieldRecordSize]];
+
+    uint32_t numberOfRecords = [dataController read_uint32:range lastReadHex:&lastReadHex];
+    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                           :lastReadHex
+                           :@"Number of Records"
+                           :[NSString stringWithFormat:@"%i", numberOfRecords]];
+
+    for (uint32_t i = 0; i < numberOfRecords; i++) {
+        [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+
+        uint32_t flags = [dataController read_uint32:range lastReadHex:&lastReadHex];
+        [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                               :lastReadHex
+                               :@"Flags"
+                               :[NSString stringWithFormat:@"%.8lX", flags]];
+
+        uint32_t nameValue = 0;
+        uint32_t nameOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex offset:&nameValue];
+        uint64_t nameAddress = [self fileOffsetToRVA64:nameOffset];
+        const char *nameName = (const char *)[self imageAt:nameOffset];
+        [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                               :lastReadHex
+                               :@"Record Name"
+                               :[NSString stringWithFormat:@"0x%.8lX(%s)", nameAddress, nameName]];
+
+        uint32_t fieldNameValue = 0;
+        uint32_t fieldNameOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex offset:&fieldNameValue];
+        uint64_t fieldNameAddress = [self fileOffsetToRVA64:fieldNameOffset];
+        const char *fieldNameName = (const char *)[self imageAt:fieldNameOffset];
+        [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                               :lastReadHex
+                               :@"Record Field Name"
+                               :[NSString stringWithFormat:@"0x%.8lX(%s)", fieldNameAddress, fieldNameName]];
+    }
+
+    return node;
 }
 
 //------------------------------------------------------------------------------
