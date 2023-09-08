@@ -275,6 +275,12 @@ struct method64_t
   uint64_t imp;               // IMP (64-bit pointer)
 };
 
+struct small_method_t {
+    int32_t name;
+    int32_t types;
+    int32_t imp;
+};
+
 struct ivar64_list_t 
 {
   uint32_t entsize;
@@ -1936,9 +1942,13 @@ struct swift_field_descriptor
   }
   
   MVNodeSaver nodeSaver;
+    uint32_t length = sizeof(struct method64_list_t) + method64_list_t->count*sizeof(struct method64_t);
+    if (method64_list_t->entsize & 0x80000000) {
+        length = sizeof(struct method64_list_t) + method64_list_t->count*sizeof(struct small_method_t);
+    }
   node = [parent insertChildWithDetails:[@"ObjC2 Method64 List: " stringByAppendingString:caption]
                                location:location 
-                                 length:sizeof(struct method64_list_t) + method64_list_t->count*sizeof(struct method64_t)
+                                 length:length
                                   saver:nodeSaver];
   
   NSRange range = NSMakeRange(location,0);
@@ -1963,32 +1973,60 @@ struct swift_field_descriptor
   
   for (uint32_t nmeth = 0; nmeth < method64_list_t->count; ++nmeth)
   {
-    MATCH_STRUCT(method64_t,NSMaxRange(range))
-    
     // accumulate search info
     NSUInteger bookmark = node.details.rowCount;
     NSString * symbolName = nil;
-    
-    [dataController read_uint64:range lastReadHex:&lastReadHex];
-    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
-                           :lastReadHex
-                           :@"Name"
-                           :(symbolName = [self findSymbolAtRVA64:method64_t->name])];
-    
-    [dataController read_uint64:range lastReadHex:&lastReadHex];
-    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
-                           :lastReadHex
-                           :@"Types"
-                           :[self findSymbolAtRVA64:method64_t->types]];
-    
-    [dataController read_uint64:range lastReadHex:&lastReadHex];
-    [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
-                           :lastReadHex
-                           :@"Implementation"
-                           :[self findSymbolAtRVA64:method64_t->imp]];
-    
-    [node.details setAttributesFromRowIndex:bookmark:MVMetaDataAttributeName,symbolName,nil];
-    [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+
+      if (method64_list_t->entsize & 0x80000000) {
+          MATCH_STRUCT(small_method_t,NSMaxRange(range))
+
+          uint32_t nameOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex];
+          uint64_t nameAddress = [self fileOffsetToRVA64:nameOffset];
+          [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                 :lastReadHex
+                                 :@"Name"
+                                 :(symbolName = [self findSymbolAtRVA64:nameAddress])];
+
+          uint32_t typesOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex];
+          uint64_t typesAddress = [self fileOffsetToRVA64:typesOffset];
+          [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                 :lastReadHex
+                                 :@"Types"
+                                 :[self findSymbolAtRVA64:typesAddress]];
+
+          uint32_t impOffset = [dataController read_uint32_offset:range lastReadHex:&lastReadHex];
+          uint64_t impAddress = [self fileOffsetToRVA64:impOffset];
+          [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                 :lastReadHex
+                                 :@"Implementation"
+                                 :[self findSymbolAtRVA64:impAddress]];
+
+          [node.details setAttributesFromRowIndex:bookmark:MVMetaDataAttributeName,symbolName,nil];
+          [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+      } else {
+          MATCH_STRUCT(method64_t,NSMaxRange(range))
+
+          [dataController read_uint64:range lastReadHex:&lastReadHex];
+          [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                 :lastReadHex
+                                 :@"Name"
+                                 :(symbolName = [self findSymbolAtRVA64:method64_t->name])];
+
+          [dataController read_uint64:range lastReadHex:&lastReadHex];
+          [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                 :lastReadHex
+                                 :@"Types"
+                                 :[self findSymbolAtRVA64:method64_t->types]];
+
+          [dataController read_uint64:range lastReadHex:&lastReadHex];
+          [node.details appendRow:[NSString stringWithFormat:@"%.8lX", range.location]
+                                 :lastReadHex
+                                 :@"Implementation"
+                                 :[self findSymbolAtRVA64:method64_t->imp]];
+
+          [node.details setAttributesFromRowIndex:bookmark:MVMetaDataAttributeName,symbolName,nil];
+          [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+      }
   }
   
   return node;

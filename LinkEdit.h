@@ -21,76 +21,76 @@
                         length:(uint32_t)length
                    baseAddress:(uint64_t)baseAddress;
 
-- (MVNode *) createSymbolsNode:parent 
+- (MVNode *) createSymbolsNode:(MVNode *)parent
                        caption:(NSString *)caption
                       location:(uint32_t)location
                         length:(uint32_t)length;
 
-- (MVNode *) createSymbols64Node:parent 
+- (MVNode *) createSymbols64Node:(MVNode *)parent
                          caption:(NSString *)caption
                         location:(uint32_t)location
                           length:(uint32_t)length;
 
-- (MVNode *) createReferencesNode:parent 
+- (MVNode *) createReferencesNode:(MVNode *)parent
                           caption:(NSString *)caption
                          location:(uint32_t)location
                            length:(uint32_t)length;
 
-- (MVNode *) createISymbolsNode:parent
+- (MVNode *) createISymbolsNode:(MVNode *)parent
                         caption:(NSString *)caption
                        location:(uint32_t)location
                          length:(uint32_t)length;
 
-- (MVNode *) createISymbols64Node:parent
+- (MVNode *) createISymbols64Node:(MVNode *)parent
                           caption:(NSString *)caption
                          location:(uint32_t)location
                            length:(uint32_t)length;
 
-- (MVNode *) createTOCNode:parent
+- (MVNode *) createTOCNode:(MVNode *)parent
                    caption:(NSString *)caption
                   location:(uint32_t)location
                     length:(uint32_t)length;
 
-- (MVNode *) createTOC64Node:parent
+- (MVNode *) createTOC64Node:(MVNode *)parent
                      caption:(NSString *)caption
                     location:(uint32_t)location
                       length:(uint32_t)length;
 
-- (MVNode *) createModulesNode:parent
+- (MVNode *) createModulesNode:(MVNode *)parent
                        caption:(NSString *)caption
                       location:(uint32_t)location
                         length:(uint32_t)length;
 
-- (MVNode *) createModules64Node:parent
+- (MVNode *) createModules64Node:(MVNode *)parent
                          caption:(NSString *)caption
                         location:(uint32_t)location
                           length:(uint32_t)length;
 
-- (MVNode *) createTwoLevelHintsNode:parent 
+- (MVNode *) createTwoLevelHintsNode:(MVNode *)parent
                              caption:(NSString *)caption
                             location:(uint32_t)location
                               length:(uint32_t)length
                                index:(uint32_t)index;
 
-- (MVNode *) createSplitSegmentNode:parent
+- (MVNode *) createSplitSegmentNode:(MVNode *)parent
                             caption:(NSString *)caption
                            location:(uint32_t)location
                              length:(uint32_t)length
                         baseAddress:(uint64_t)baseAddress;
 
-- (MVNode *) createFunctionStartsNode:parent
+- (MVNode *) createFunctionStartsNode:(MVNode *)parent
                               caption:(NSString *)caption
                              location:(uint32_t)location
                                length:(uint32_t)length
                           baseAddress:(uint64_t)baseAddress;
 
-- (MVNode *) createDataInCodeEntriesNode:parent
+- (MVNode *) createDataInCodeEntriesNode:(MVNode *)parent
                                  caption:(NSString *)caption
                                 location:(uint32_t)location
                                   length:(uint32_t)length;
 
 
-- (MVNode *) createChainedFixupsNode:parent
+- (MVNode *) createChainedFixupsNode:(MVNode *)parent
                              caption:(NSString *)caption
                             location:(uint32_t)location
                               length:(uint32_t)length;

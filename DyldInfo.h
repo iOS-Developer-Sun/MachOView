@@ -10,9 +10,9 @@
 
 
 @interface DyldHelper : NSObject
-{
-  NSMutableDictionary * externalMap; // external symbol name --> symbols index (negative number)
-}
+
+// external symbol name --> symbols index (negative number)
+@property (nonatomic, strong, readonly) NSMutableDictionary * externalMap;
 
 +(DyldHelper *) dyldHelperWithSymbols:(NSDictionary *)symbolNames is64Bit:(bool)is64Bit;
 

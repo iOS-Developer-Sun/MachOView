@@ -27,7 +27,7 @@ using namespace std;
 {
   if (self = [super init])
   {
-    externalMap = [[NSMutableDictionary alloc] initWithCapacity:[symbolNames count]];
+    _externalMap = [[NSMutableDictionary alloc] initWithCapacity:[symbolNames count]];
     
     NSEnumerator * enumerator = [symbolNames keyEnumerator];
     id key;
@@ -38,7 +38,7 @@ using namespace std;
       if ((is64Bit == NO && (int32_t)[symbolIndex unsignedLongValue] < 0) ||
           (int64_t)[symbolIndex unsignedLongLongValue] < 0)
       {
-        [externalMap setObject:key forKey:[symbolNames objectForKey:key]];
+        [_externalMap setObject:key forKey:[symbolNames objectForKey:key]];
       }
     }
   }
@@ -54,7 +54,7 @@ using namespace std;
 //-----------------------------------------------------------------------------
 -(NSNumber *) indexForSymbol:(NSString *)symbolName
 {
-  return [externalMap objectForKey:symbolName];
+  return [_externalMap objectForKey:symbolName];
 }
 
 @end

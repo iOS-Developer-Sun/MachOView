@@ -14,6 +14,8 @@
 
 #import "Layout.h"
 
+@class DyldHelper;
+
 typedef std::vector<struct load_command const *>          CommandVector;
 typedef std::vector<struct segment_command const *>       SegmentVector;
 typedef std::vector<struct segment_command_64 const *>    Segment64Vector;
@@ -55,14 +57,21 @@ typedef std::map<uint64_t,uint64_t>                             ExceptionFrameMa
   SegmentInfoMap          segmentInfo;      // segment info lookup table by offset
   SectionInfoMap          sectionInfo;      // section info lookup table by address
   ExceptionFrameMap       lsdaInfo;         // LSDA info lookup table by address
-  
+
   NSMutableDictionary *   symbolNames;      // symbol names by address
+    NSMutableDictionary *symbolsMap;
+    NSMutableArray *fixupImports;
 }
+
+@property (nonatomic, strong, readonly) DyldHelper *dyldHelper;
 
 + (MachOLayout *)layoutWithDataController:(MVDataController *)dc rootNode:(MVNode *)node;
 
 - (struct section const *)getSectionByIndex:(uint32_t)index;
 - (struct section_64 const *)getSection64ByIndex:(uint32_t)index;
+
+- (struct segment_command const *)getSegmentByIndex:(uint32_t)index;
+- (struct segment_command_64 const *)getSegment64ByIndex:(uint32_t)index;
 
 - (struct nlist const *)getSymbolByIndex:(uint32_t)index;
 - (struct nlist_64 const *)getSymbol64ByIndex:(uint32_t)index;

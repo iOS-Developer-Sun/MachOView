@@ -36,6 +36,8 @@ using namespace std;
   if (self = [super initWithDataController:dc rootNode:node])
   {
     symbolNames = [[NSMutableDictionary alloc] init];
+      fixupImports = [NSMutableArray array];
+      symbolsMap = [NSMutableDictionary dictionary];
   }
   return self;
 }
@@ -72,6 +74,18 @@ using namespace std;
 {
   static const struct section_64 notfound = { "???", "?????", 0, 0, 0, 0, 0, 0, 0, 0, 0 };
   return (index < sections_64.size() ? sections_64.at(index) : &notfound);
+}
+
+//-----------------------------------------------------------------------------
+- (const struct segment_command *)getSegmentByIndex:(uint32_t)index
+{
+    return (index < segments.size() ? segments.at(index) : NULL);
+}
+
+//-----------------------------------------------------------------------------
+- (const struct segment_command_64 *)getSegment64ByIndex:(uint32_t)index
+{
+    return (index < segments_64.size() ? segments_64.at(index) : NULL);
 }
 
 //-----------------------------------------------------------------------------
@@ -1117,8 +1131,9 @@ _hex2int(char const * a, uint32_t len)
                                       location:dyldInfoRange.location
                                         length:dyldInfoRange.length];
   
-  DyldHelper * dyldHelper = [DyldHelper dyldHelperWithSymbols:symbolNames is64Bit:[self is64bit]];
-  
+    DyldHelper *dyldHelper = [DyldHelper dyldHelperWithSymbols:symbolNames is64Bit:[self is64bit]];
+    _dyldHelper = dyldHelper;
+
   NSString * lastNodeCaption;
   @try 
   {
@@ -1882,6 +1897,8 @@ struct CompareSectionByName
     section_64 = [self findSection64ByName:"__class_list" andSegment:"__OBJC2"];
     if (section_64 == NULL)
       section_64 = [self findSection64ByName:"__objc_classlist" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_classlist" andSegment:"__DATA_CONST"];
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjC2Pointer64ListNode:sectionNode 
@@ -1892,6 +1909,9 @@ struct CompareSectionByName
     }
 
     section_64 = [self findSection64ByName:"__objc_nlclslist" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_nlclslist" andSegment:"__DATA_CONST"];
+
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjC2Pointer64ListNode:sectionNode
@@ -1904,6 +1924,8 @@ struct CompareSectionByName
     section_64 = [self findSection64ByName:"__class_refs" andSegment:"__OBJC2"];
     if (section_64 == NULL)
       section_64 = [self findSection64ByName:"__objc_classrefs" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_classrefs" andSegment:"__DATA_CONST"];
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjC2Pointer64ListNode:sectionNode 
@@ -1916,6 +1938,8 @@ struct CompareSectionByName
     section_64 = [self findSection64ByName:"__super_refs" andSegment:"__OBJC2"];
     if (section_64 == NULL)
       section_64 = [self findSection64ByName:"__objc_superrefs" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_superrefs" andSegment:"__DATA_CONST"];
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjC2Pointer64ListNode:sectionNode 
@@ -1928,6 +1952,8 @@ struct CompareSectionByName
     section_64 = [self findSection64ByName:"__category_list" andSegment:"__OBJC2"];
     if (section_64 == NULL)
       section_64 = [self findSection64ByName:"__objc_catlist" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_catlist" andSegment:"__DATA_CONST"];
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjC2Pointer64ListNode:sectionNode 
@@ -1938,6 +1964,9 @@ struct CompareSectionByName
     }
 
     section_64 = [self findSection64ByName:"__objc_nlcatlist" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_nlcatlist" andSegment:"__DATA_CONST"];
+
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjC2Pointer64ListNode:sectionNode
@@ -1950,6 +1979,8 @@ struct CompareSectionByName
     section_64 = [self findSection64ByName:"__protocol_list" andSegment:"__OBJC2"];
     if (section_64 == NULL)
       section_64 = [self findSection64ByName:"__objc_protolist" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_protolist" andSegment:"__DATA_CONST"];
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjC2Pointer64ListNode:sectionNode 
@@ -1962,6 +1993,8 @@ struct CompareSectionByName
     section_64 = [self findSection64ByName:"__message_refs" andSegment:"__OBJC2"];
     if (section_64 == NULL)
       section_64 = [self findSection64ByName:"__objc_msgrefs" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_msgrefs" andSegment:"__DATA_CONST"];
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjC2MsgRefs64Node:sectionNode 
@@ -1973,6 +2006,8 @@ struct CompareSectionByName
     section_64 = [self findSection64ByName:"__image_info" andSegment:"__OBJC"];
     if (section_64 == NULL)
       section_64 = [self findSection64ByName:"__objc_imageinfo" andSegment:"__DATA"];
+      if (section_64 == NULL)
+          section_64 = [self findSection64ByName:"__objc_imageinfo" andSegment:"__DATA_CONST"];
     if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
     {
       [self createObjCImageInfoNode:sectionNode 
