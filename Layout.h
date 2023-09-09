@@ -37,7 +37,7 @@
 - (void)                doMainTasks;
 - (void)                doBackgroundTasks;
 - (NSString *)          convertToRVA: (NSString *)offsetStr;
-- (MVNode *)            findNodeByUserInfo:(NSDictionary *)userInfo;
+- (MVNode *)            findNodeBy:(BOOL(^)(MVNode *node))block;
 
 - (MVNode *)            createDataNode:(MVNode *)parent
                                caption:(NSString *)caption

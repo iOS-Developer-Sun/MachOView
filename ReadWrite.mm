@@ -107,15 +107,30 @@
 }
 
 //-----------------------------------------------------------------------------
-- (NSString *)getHexStr:(NSRange &)range
-{
-  NSMutableString * lastReadHex = [NSMutableString stringWithCapacity:2*range.length];
-  for (NSUInteger i = 0; i < range.length; ++i)
-  {
-    int value = *((uint8_t *)[fileData bytes] + range.location + i);
-    [lastReadHex appendFormat:@"%.2X",value];
-  }
-  return lastReadHex;
+- (NSString *)getHexStr:(NSRange &)range {
+    char buffer[range.length * 2 + 1];
+    buffer[range.length * 2] = 0;
+    for (NSUInteger i = 0; i < range.length; ++i) {
+        uint8_t v = *((uint8_t *)[fileData bytes] + range.location + i);
+        uint8_t h = (v / 0x10);
+        char hc;
+        if (h < 10) {
+            hc = h + '0';
+        } else {
+            hc = h - 10 + 'A';
+        }
+        buffer[i * 2] = hc;
+        uint8_t l = (v % 0x10);
+        char lc;
+        if (l < 10) {
+            lc = l + '0';
+        } else {
+            lc = l - 10 + 'A';
+        }
+        buffer[i * 2 + 1] = lc;
+    }
+    NSString *ret = @(buffer);
+    return ret;
 }
 
 //-----------------------------------------------------------------------------

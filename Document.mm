@@ -766,7 +766,7 @@ enum ViewType
       dataController.selectedNode = nodeToSelect;
     }
   
-    MVLayout * layout = [nodeToSelect.userInfo objectForKey:MVLayoutUserInfoKey];
+    MVLayout * layout = nodeToSelect.userInfo.layout;
     BOOL is64bit = [layout is64bit];
   
     if (nodeToSelect.details != nil)

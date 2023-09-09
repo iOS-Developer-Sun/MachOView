@@ -21,6 +21,13 @@
 using namespace std;
 
 //============================================================================
+@interface MachOLayout ()
+
+@property (nonatomic, strong) NSMapTable *sectionNodes;
+@property (nonatomic, weak) MVNode * relocsNode;
+
+@end
+
 @implementation MachOLayout
 
 // ----------------------------------------------------------------------------
@@ -38,6 +45,7 @@ using namespace std;
     symbolNames = [[NSMutableDictionary alloc] init];
       fixupImports = [NSMutableArray array];
       symbolsMap = [NSMutableDictionary dictionary];
+      _sectionNodes = [NSMapTable strongToWeakObjectsMapTable];
   }
   return self;
 }
@@ -60,6 +68,14 @@ using namespace std;
 {
   MATCH_STRUCT(mach_header,imageOffset);
   return (mach_header->filetype == MH_DYLIB_STUB);
+}
+
+- (DyldHelper *)generateDyldHelper {
+    if (!_dyldHelper) {
+        DyldHelper *dyldHelper = [DyldHelper dyldHelperWithSymbols:symbolNames is64Bit:[self is64bit]];
+        _dyldHelper = dyldHelper;
+    }
+    return _dyldHelper;
 }
 
 //-----------------------------------------------------------------------------
@@ -110,24 +126,28 @@ using namespace std;
 }
 
 //-----------------------------------------------------------------------------
-- (NSString *)findSymbolAtRVA:(uint32_t)rva
-{
-  NSParameterAssert([self is64bit] == NO);
-  NSString * symbolName = [symbolNames objectForKey:[NSNumber numberWithUnsignedLong:rva]];
-  return (symbolName != nil ? symbolName : [NSString stringWithFormat:@"0x%X",rva]);
+- (NSString *)findSymbolAtRVA:(uint32_t)rva {
+    NSParameterAssert([self is64bit] == NO);
+    NSString * symbolName = symbolNames[@(rva)];
+    if (!symbolName) {
+        symbolName = [NSString stringWithFormat:@"0x%X",rva];
+    }
+    return symbolName;
 }
 
 //-----------------------------------------------------------------------------
 - (NSString *)findSymbolAtRVA64:(uint64_t)rva64
 {
-  NSParameterAssert([self is64bit] == YES);
-  // extend external symbols represented in 32bit to 64bit
-  if ((int32_t)rva64 < 0)
-  {
-    rva64 |= 0xffffffff00000000LL;
-  }
-  NSString * symbolName = [symbolNames objectForKey:[NSNumber numberWithUnsignedLongLong:rva64]];
-  return (symbolName != nil ? symbolName : [NSString stringWithFormat:@"0x%qX",rva64]);
+    NSParameterAssert([self is64bit] == YES);
+    // extend external symbols represented in 32bit to 64bit
+    if ((int32_t)rva64 < 0) {
+        rva64 |= 0xffffffff00000000LL;
+    }
+    NSString * symbolName = symbolNames[@(rva64)];
+    if (!symbolName) {
+        symbolName = [NSString stringWithFormat:@"0x%qX",rva64];
+    }
+    return symbolName;
 }
 
 //-----------------------------------------------------------------------------
@@ -146,6 +166,10 @@ using namespace std;
     }
   }
   return NULL;
+}
+
+- (MVNode *)findNodeBySectionAddress:(uint64_t)address {
+    return [self.sectionNodes objectForKey:@(address)];
 }
 
 //-----------------------------------------------------------------------------
@@ -298,44 +322,8 @@ _hex2int(char const * a, uint32_t len)
           : [NSString stringWithFormat:@"%.8qX",[self fileOffsetToRVA64:fileOffset]]);
 }
 
-// ----------------------------------------------------------------------------
-- (NSDictionary *)userInfoForSection:(struct section const *)section
-{
-  if (section == NULL) return nil;
-  typeof(self) __weak weakSelf = self;
-  return [NSDictionary dictionaryWithObjectsAndKeys:
-          weakSelf,MVLayoutUserInfoKey,
-          NSSTRING(string(section->segname,16).c_str()), @"segname",
-          NSSTRING(string(section->sectname,16).c_str()), @"sectname",
-          [NSNumber numberWithUnsignedLong:section->addr], @"address",
-          nil];
-}
-
 //-----------------------------------------------------------------------------
-- (NSDictionary *)userInfoForSection64:(struct section_64 const *)section_64
-{
-  if (section_64 == NULL) return nil;
-  typeof(self) __weak weakSelf = self;
-  return [NSDictionary dictionaryWithObjectsAndKeys:
-          weakSelf,MVLayoutUserInfoKey,
-          NSSTRING(string(section_64->segname,16).c_str()), @"segname",
-          NSSTRING(string(section_64->sectname,16).c_str()), @"sectname",
-          [NSNumber numberWithUnsignedLongLong:section_64->addr], @"address",
-          nil];
-}
-
-//-----------------------------------------------------------------------------
-- (NSDictionary *)userInfoForRelocs
-{
-  typeof(self) __weak weakSelf = self;
-  return [NSDictionary dictionaryWithObjectsAndKeys:
-          weakSelf,MVLayoutUserInfoKey,
-          @"Relocations", MVNodeUserInfoKey,
-          nil];
-}
-
-//-----------------------------------------------------------------------------
-- (NSDictionary *)sectionInfoForRVA:(uint32_t)rva
+- (struct section *)sectionForRVA:(uint32_t)rva
 {
   NSParameterAssert([self is64bit] == NO);
 
@@ -350,11 +338,11 @@ _hex2int(char const * a, uint32_t len)
     NSLog(@"warning: no section info found for address 0x%.8X",rva);
     return nil;
   }
-  return (--iter)->second.second;
+  return (struct section *)(--iter)->second.second;
 }
 
 //-----------------------------------------------------------------------------
-- (NSDictionary *)sectionInfoForRVA64:(uint64_t)rva64
+- (struct section_64 *)sectionForRVA64:(uint64_t)rva64
 {
   NSParameterAssert([self is64bit] == YES);
 
@@ -369,38 +357,38 @@ _hex2int(char const * a, uint32_t len)
     NSLog(@"warning: no section info found for address 0x%.16qX",rva64);
     return nil;
   }
-  return (--iter)->second.second;
+  return (struct section_64 *)(--iter)->second.second;
 }
 //-----------------------------------------------------------------------------
 - (NSString *)findSectionContainsRVA:(uint32_t)rva
 {
-  NSDictionary * userInfo = [self sectionInfoForRVA:rva];
-  return (userInfo ? [NSString stringWithFormat:@"%8s %-16s",
-                      CSTRING([userInfo objectForKey:@"segname"]),
-                      CSTRING([userInfo objectForKey:@"sectname"])] : @"NO SECTION               ");
+    struct section *section = [self sectionForRVA:rva];
+    return (section ? [NSString stringWithFormat:@"%8s %-16s",
+                      section->segname,
+                      section->sectname] : @"NO SECTION               ");
 }
 
 //-----------------------------------------------------------------------------
 - (NSString *)findSectionContainsRVA64:(uint64_t)rva64
 {
-  NSDictionary * userInfo = [self sectionInfoForRVA64:rva64];
-  return (userInfo ? [NSString stringWithFormat:@"%8s %-16s",
-                      CSTRING([userInfo objectForKey:@"segname"]),
-                      CSTRING([userInfo objectForKey:@"sectname"])] : @"NO SECTION               ");
+    struct section_64 *section_64 = [self sectionForRVA64:rva64];
+    return (section_64 ? [NSString stringWithFormat:@"%8s %-16s",
+                          section_64->segname,
+                          section_64->sectname] : @"NO SECTION               ");
 }
 
 //------------------------------------------------------------------------------
 - (MVNode *)sectionNodeContainsRVA:(uint32_t)rva
 {
-  NSDictionary * userInfo = [self sectionInfoForRVA:rva];
-  return (userInfo ? [self findNodeByUserInfo:userInfo] : nil);
+  struct section *section = [self sectionForRVA:rva];
+  return (section ? [self findNodeBySectionAddress:section->addr] : nil);
 }
 
 //------------------------------------------------------------------------------
 - (MVNode *)sectionNodeContainsRVA64:(uint64_t)rva64
 {
-  NSDictionary * userInfo = [self sectionInfoForRVA64:rva64];
-  return (userInfo ? [self findNodeByUserInfo:userInfo] : nil);
+    struct section_64 *section_64 = [self sectionForRVA64:rva64];
+    return (section_64 ? [self findNodeBySectionAddress:section_64->addr] : nil);
 }
 
 //-----------------------------------------------------------------------------
@@ -1130,9 +1118,8 @@ _hex2int(char const * a, uint32_t len)
                                        caption:@"Dynamic Loader Info"
                                       location:dyldInfoRange.location
                                         length:dyldInfoRange.length];
-  
-    DyldHelper *dyldHelper = [DyldHelper dyldHelperWithSymbols:symbolNames is64Bit:[self is64bit]];
-    _dyldHelper = dyldHelper;
+
+  DyldHelper *dyldHelper = [self generateDyldHelper];
 
   NSString * lastNodeCaption;
   @try 
@@ -1230,7 +1217,7 @@ struct CompareSectionByName
   for (SectionVector::const_iterator sectIter = ++sections.begin(); sectIter != sections.end(); ++sectIter)
   {
     struct section const * section = *sectIter;
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section->addr];
     if (sectionNode == nil)
     {
       continue;
@@ -1278,7 +1265,7 @@ struct CompareSectionByName
   for (SectionVector::const_iterator sectIter = ++sections.begin(); sectIter != sections.end(); ++sectIter)
   {
     struct section const * section = *sectIter;
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section->addr];
     if (sectionNode == nil)
     {
       continue;
@@ -1351,7 +1338,7 @@ struct CompareSectionByName
   for (Section64Vector::const_iterator sectIter = ++sections_64.begin(); sectIter != sections_64.end(); ++sectIter)
   {
     struct section_64 const * section_64 = *sectIter;
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section_64->addr];
     if (sectionNode == nil)
     {
       continue;
@@ -1399,7 +1386,7 @@ struct CompareSectionByName
   for (Section64Vector::const_iterator sectIter = ++sections_64.begin(); sectIter != sections_64.end(); ++sectIter)
   {
     struct section_64 const * section_64 = *sectIter;
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section_64->addr];
     if (sectionNode == nil)
     {
       continue;
@@ -1480,7 +1467,7 @@ struct CompareSectionByName
   {
     struct section const * section = *sectIter;
     
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section->addr];
     // there is no valid exception data
     if (sectionNode == nil) 
     {
@@ -1537,7 +1524,7 @@ struct CompareSectionByName
   {
     struct section_64 const * section_64 = *sectIter;
     
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section_64->addr];
     // there is no valid exception data
     if (sectionNode == nil) 
     {
@@ -1603,7 +1590,7 @@ struct CompareSectionByName
   {
     struct section const * section = *sectIter;
     
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section->addr];
 //    NSParameterAssert(sectionNode != nil);
     if (sectionNode == nil)
     {
@@ -1657,7 +1644,7 @@ struct CompareSectionByName
   {
     struct section_64 const * section_64 = *sectIter;
     
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section_64->addr];
 //    NSParameterAssert(sectionNode != nil);
     if (sectionNode == nil)
     {
@@ -1697,362 +1684,362 @@ struct CompareSectionByName
 //-----------------------------------------------------------------------------
 -(void)processObjcSections
 {
-  PointerVector objcClassPointers;
-  PointerVector objcNonLazyClassPointers;
-  PointerVector objcClassReferences;
-  PointerVector objcSuperReferences;
-  PointerVector objcCategoryPointers;
-  PointerVector objcNonLazyCategoryPointers;
-  PointerVector objcProtocolPointers;
-  
-  NSString * lastNodeCaption;
-  MVNode * sectionNode;
-  struct section const * section;
-  bool hasObjCModules = false; // objC version detector
-  
-  @try 
-  {
-    // first Objective-C ABI
-    section = [self findSectionByName:"__module_info" andSegment:"__OBJC"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-    {
-      hasObjCModules = true;
-      [self createObjCModulesNode:sectionNode 
-                          caption:(lastNodeCaption = @"ObjC Modules") 
-                         location:section->offset + imageOffset 
-                           length:section->size];
-    }
-    
-    section = [self findSectionByName:"__class_ext" andSegment:"__OBJC"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-    {
-      [self createObjCClassExtNode:sectionNode 
-                           caption:(lastNodeCaption = @"ObjC Class Extensions") 
-                          location:section->offset + imageOffset 
-                            length:section->size];
-    }
-    
-    section = [self findSectionByName:"__protocol_ext" andSegment:"__OBJC"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-    {
-      [self createObjCProtocolExtNode:sectionNode 
-                              caption:(lastNodeCaption = @"ObjC Protocol Extensions") 
-                             location:section->offset + imageOffset 
-                               length:section->size];
-    }
-    
-    // second Objective-C ABI
-    if (hasObjCModules == false)
-    {
-      section = [self findSectionByName:"__category_list" andSegment:"__OBJC2"];
-      if (section == NULL)
-        section = [self findSectionByName:"__objc_catlist" andSegment:"__DATA"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-      {
-        [self createObjC2PointerListNode:sectionNode
-                                 caption:(lastNodeCaption = @"ObjC2 Category List")
-                                location:section->offset + imageOffset
-                                  length:section->size
-                                pointers:objcCategoryPointers];
-      }
+    PointerVector objcClassPointers;
+    PointerVector objcNonLazyClassPointers;
+    PointerVector objcClassReferences;
+    PointerVector objcSuperReferences;
+    PointerVector objcCategoryPointers;
+    PointerVector objcNonLazyCategoryPointers;
+    PointerVector objcProtocolPointers;
 
-      section = [self findSectionByName:"__objc_nlcatlist" andSegment:"__DATA"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-      {
-        [self createObjC2PointerListNode:sectionNode
-                                 caption:(lastNodeCaption = @"ObjC2 Non Lazy Category List")
-                                location:section->offset + imageOffset
-                                  length:section->size
-                                pointers:objcNonLazyCategoryPointers];
-      }
+    NSString * lastNodeCaption;
+    MVNode * sectionNode;
+    struct section const * section;
+    bool hasObjCModules = false; // objC version detector
 
-      section = [self findSectionByName:"__class_list" andSegment:"__OBJC2"];
-      if (section == NULL)
-        section = [self findSectionByName:"__objc_classlist" andSegment:"__DATA"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-      {
-        [self createObjC2PointerListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 Class List") 
-                                location:section->offset + imageOffset 
-                                  length:section->size
-                                pointers:objcClassPointers];
-      }
+    @try
+    {
+        // first Objective-C ABI
+        section = [self findSectionByName:"__module_info" andSegment:"__OBJC"];
+        if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+        {
+            hasObjCModules = true;
+            [self createObjCModulesNode:sectionNode
+                                caption:(lastNodeCaption = @"ObjC Modules")
+                               location:section->offset + imageOffset
+                                 length:section->size];
+        }
 
-      section = [self findSectionByName:"__objc_nlclslist" andSegment:"__DATA"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-      {
-        [self createObjC2PointerListNode:sectionNode
-                                 caption:(lastNodeCaption = @"ObjC2 Non Lazy Class List")
+        section = [self findSectionByName:"__class_ext" andSegment:"__OBJC"];
+        if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+        {
+            [self createObjCClassExtNode:sectionNode
+                                 caption:(lastNodeCaption = @"ObjC Class Extensions")
                                 location:section->offset + imageOffset
-                                  length:section->size
-                                pointers:objcNonLazyClassPointers];
-      }
-      
-      section = [self findSectionByName:"__class_refs" andSegment:"__OBJC2"];
-      if (section == NULL)
-        section = [self findSectionByName:"__objc_classrefs" andSegment:"__DATA"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-      {
-        [self createObjC2PointerListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 References") 
-                                location:section->offset + imageOffset 
-                                  length:section->size
-                                pointers:objcClassReferences];
-      }
-      
-      section = [self findSectionByName:"__super_refs" andSegment:"__OBJC2"];
-      if (section == NULL)
-        section = [self findSectionByName:"__objc_superrefs" andSegment:"__DATA"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-      {
-        [self createObjC2PointerListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 References") 
-                                location:section->offset + imageOffset 
-                                  length:section->size
-                                pointers:objcSuperReferences];
-      }
-      
-      section = [self findSectionByName:"__protocol_list" andSegment:"__OBJC2"];
-      if (section == NULL)
-        section = [self findSectionByName:"__objc_protolist" andSegment:"__DATA"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-      {
-        [self createObjC2PointerListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 Pointer List")
-                                location:section->offset + imageOffset 
-                                  length:section->size
-                                pointers:objcProtocolPointers];
-      }
-      
-      section = [self findSectionByName:"__message_refs" andSegment:"__OBJC2"];
-      if (section == NULL)
-        section = [self findSectionByName:"__objc_msgrefs" andSegment:"__DATA"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-      {
-        [self createObjC2MsgRefsNode:sectionNode 
-                             caption:(lastNodeCaption = @"ObjC2 Message References") 
-                            location:section->offset + imageOffset 
-                              length:section->size];
-      }
-    } // if (hasObjcModules == false)
-    
-    section = [self findSectionByName:"__image_info" andSegment:"__OBJC"];
-    if (section == NULL)
-      section = [self findSectionByName:"__objc_imageinfo" andSegment:"__DATA"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
-    {
-      [self createObjCImageInfoNode:sectionNode 
-                            caption:(lastNodeCaption = @"ObjC2 Image Info") 
-                           location:section->offset + imageOffset 
-                             length:section->size];
+                                  length:section->size];
+        }
+
+        section = [self findSectionByName:"__protocol_ext" andSegment:"__OBJC"];
+        if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+        {
+            [self createObjCProtocolExtNode:sectionNode
+                                    caption:(lastNodeCaption = @"ObjC Protocol Extensions")
+                                   location:section->offset + imageOffset
+                                     length:section->size];
+        }
+
+        // second Objective-C ABI
+        if (hasObjCModules == false)
+        {
+            section = [self findSectionByName:"__category_list" andSegment:"__OBJC2"];
+            if (section == NULL)
+                section = [self findSectionByName:"__objc_catlist" andSegment:"__DATA"];
+            if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+            {
+                [self createObjC2PointerListNode:sectionNode
+                                         caption:(lastNodeCaption = @"ObjC2 Category List")
+                                        location:section->offset + imageOffset
+                                          length:section->size
+                                        pointers:objcCategoryPointers];
+            }
+
+            section = [self findSectionByName:"__objc_nlcatlist" andSegment:"__DATA"];
+            if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+            {
+                [self createObjC2PointerListNode:sectionNode
+                                         caption:(lastNodeCaption = @"ObjC2 Non Lazy Category List")
+                                        location:section->offset + imageOffset
+                                          length:section->size
+                                        pointers:objcNonLazyCategoryPointers];
+            }
+
+            section = [self findSectionByName:"__class_list" andSegment:"__OBJC2"];
+            if (section == NULL)
+                section = [self findSectionByName:"__objc_classlist" andSegment:"__DATA"];
+            if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+            {
+                [self createObjC2PointerListNode:sectionNode
+                                         caption:(lastNodeCaption = @"ObjC2 Class List")
+                                        location:section->offset + imageOffset
+                                          length:section->size
+                                        pointers:objcClassPointers];
+            }
+
+            section = [self findSectionByName:"__objc_nlclslist" andSegment:"__DATA"];
+            if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+            {
+                [self createObjC2PointerListNode:sectionNode
+                                         caption:(lastNodeCaption = @"ObjC2 Non Lazy Class List")
+                                        location:section->offset + imageOffset
+                                          length:section->size
+                                        pointers:objcNonLazyClassPointers];
+            }
+
+            section = [self findSectionByName:"__class_refs" andSegment:"__OBJC2"];
+            if (section == NULL)
+                section = [self findSectionByName:"__objc_classrefs" andSegment:"__DATA"];
+            if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+            {
+                [self createObjC2PointerListNode:sectionNode
+                                         caption:(lastNodeCaption = @"ObjC2 References")
+                                        location:section->offset + imageOffset
+                                          length:section->size
+                                        pointers:objcClassReferences];
+            }
+
+            section = [self findSectionByName:"__super_refs" andSegment:"__OBJC2"];
+            if (section == NULL)
+                section = [self findSectionByName:"__objc_superrefs" andSegment:"__DATA"];
+            if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+            {
+                [self createObjC2PointerListNode:sectionNode
+                                         caption:(lastNodeCaption = @"ObjC2 References")
+                                        location:section->offset + imageOffset
+                                          length:section->size
+                                        pointers:objcSuperReferences];
+            }
+
+            section = [self findSectionByName:"__protocol_list" andSegment:"__OBJC2"];
+            if (section == NULL)
+                section = [self findSectionByName:"__objc_protolist" andSegment:"__DATA"];
+            if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+            {
+                [self createObjC2PointerListNode:sectionNode
+                                         caption:(lastNodeCaption = @"ObjC2 Pointer List")
+                                        location:section->offset + imageOffset
+                                          length:section->size
+                                        pointers:objcProtocolPointers];
+            }
+
+            section = [self findSectionByName:"__message_refs" andSegment:"__OBJC2"];
+            if (section == NULL)
+                section = [self findSectionByName:"__objc_msgrefs" andSegment:"__DATA"];
+            if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+            {
+                [self createObjC2MsgRefsNode:sectionNode
+                                     caption:(lastNodeCaption = @"ObjC2 Message References")
+                                    location:section->offset + imageOffset
+                                      length:section->size];
+            }
+        } // if (hasObjcModules == false)
+
+        section = [self findSectionByName:"__image_info" andSegment:"__OBJC"];
+        if (section == NULL)
+            section = [self findSectionByName:"__objc_imageinfo" andSegment:"__DATA"];
+        if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+        {
+            [self createObjCImageInfoNode:sectionNode
+                                  caption:(lastNodeCaption = @"ObjC2 Image Info")
+                                 location:section->offset + imageOffset
+                                   length:section->size];
+        }
+
+        section = [self findSectionByName:"__cfstring" andSegment:NULL];
+        if (section && (sectionNode = [self findNodeBySectionAddress:section->addr]))
+        {
+            [self createObjCCFStringsNode:sectionNode
+                                  caption:(lastNodeCaption = @"ObjC CFStrings")
+                                 location:section->offset + imageOffset
+                                   length:section->size];
+        }
     }
-    
-    section = [self findSectionByName:"__cfstring" andSegment:NULL];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]]))
+    @catch(NSException * exception)
     {
-      [self createObjCCFStringsNode:sectionNode 
-                            caption:(lastNodeCaption = @"ObjC CFStrings") 
-                           location:section->offset + imageOffset 
-                             length:section->size];
+        [self printException:exception caption:lastNodeCaption];
     }
-  }
-  @catch(NSException * exception)
-  {
-    [self printException:exception caption:lastNodeCaption];
-  }
-  
-  
-  
-  @try
-  {
-    [self parseObjC2ClassPointers:&objcClassPointers
-             NonLazyClassPointers:&objcNonLazyClassPointers
-                 CategoryPointers:&objcCategoryPointers
-          NonLazyCategoryPointers:&objcNonLazyCategoryPointers
-                 ProtocolPointers:&objcProtocolPointers];
-  }
-  @catch(NSException * exception)
-  {
-    [self printException:exception caption:lastNodeCaption];
-  }
+
+
+
+    @try
+    {
+        [self parseObjC2ClassPointers:&objcClassPointers
+                 NonLazyClassPointers:&objcNonLazyClassPointers
+                     CategoryPointers:&objcCategoryPointers
+              NonLazyCategoryPointers:&objcNonLazyCategoryPointers
+                     ProtocolPointers:&objcProtocolPointers];
+    }
+    @catch(NSException * exception)
+    {
+        [self printException:exception caption:lastNodeCaption];
+    }
 }
 
 //-----------------------------------------------------------------------------
 -(void)processObjcSections64
 {
-  Pointer64Vector objcClassPointers;
-  Pointer64Vector objcNonLazyClassPointers;
-  Pointer64Vector objcClassReferences;
-  Pointer64Vector objcSuperReferences;
-  Pointer64Vector objcCategoryPointers;
-  Pointer64Vector objcNonLazyCategoryPointers;
-  Pointer64Vector objcProtocolPointers;
-  
-  NSString * lastNodeCaption;
-  MVNode * sectionNode;
-  struct section_64 const * section_64;
-  
-  @try 
-  {
-    section_64 = [self findSection64ByName:"__class_list" andSegment:"__OBJC2"];
-    if (section_64 == NULL)
-      section_64 = [self findSection64ByName:"__objc_classlist" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_classlist" andSegment:"__DATA_CONST"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
-    {
-      [self createObjC2Pointer64ListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 Class List") 
-                                location:section_64->offset + imageOffset 
-                                  length:section_64->size
-                                pointers:objcClassPointers];
-    }
+    Pointer64Vector objcClassPointers;
+    Pointer64Vector objcNonLazyClassPointers;
+    Pointer64Vector objcClassReferences;
+    Pointer64Vector objcSuperReferences;
+    Pointer64Vector objcCategoryPointers;
+    Pointer64Vector objcNonLazyCategoryPointers;
+    Pointer64Vector objcProtocolPointers;
 
-    section_64 = [self findSection64ByName:"__objc_nlclslist" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_nlclslist" andSegment:"__DATA_CONST"];
+    NSString * lastNodeCaption;
+    MVNode * sectionNode;
+    struct section_64 const * section_64;
 
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
+    @try
     {
-      [self createObjC2Pointer64ListNode:sectionNode
-                                 caption:(lastNodeCaption = @"ObjC2 Non Lazy Class List")
+        section_64 = [self findSection64ByName:"__class_list" andSegment:"__OBJC2"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_classlist" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_classlist" andSegment:"__DATA_CONST"];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjC2Pointer64ListNode:sectionNode
+                                       caption:(lastNodeCaption = @"ObjC2 Class List")
+                                      location:section_64->offset + imageOffset
+                                        length:section_64->size
+                                      pointers:objcClassPointers];
+        }
+
+        section_64 = [self findSection64ByName:"__objc_nlclslist" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_nlclslist" andSegment:"__DATA_CONST"];
+
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjC2Pointer64ListNode:sectionNode
+                                       caption:(lastNodeCaption = @"ObjC2 Non Lazy Class List")
+                                      location:section_64->offset + imageOffset
+                                        length:section_64->size
+                                      pointers:objcNonLazyClassPointers];
+        }
+
+        section_64 = [self findSection64ByName:"__class_refs" andSegment:"__OBJC2"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_classrefs" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_classrefs" andSegment:"__DATA_CONST"];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjC2Pointer64ListNode:sectionNode
+                                       caption:(lastNodeCaption = @"ObjC2 References")
+                                      location:section_64->offset + imageOffset
+                                        length:section_64->size
+                                      pointers:objcClassReferences];
+        }
+
+        section_64 = [self findSection64ByName:"__super_refs" andSegment:"__OBJC2"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_superrefs" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_superrefs" andSegment:"__DATA_CONST"];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjC2Pointer64ListNode:sectionNode
+                                       caption:(lastNodeCaption = @"ObjC2 References")
+                                      location:section_64->offset + imageOffset
+                                        length:section_64->size
+                                      pointers:objcSuperReferences];
+        }
+
+        section_64 = [self findSection64ByName:"__category_list" andSegment:"__OBJC2"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_catlist" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_catlist" andSegment:"__DATA_CONST"];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjC2Pointer64ListNode:sectionNode
+                                       caption:(lastNodeCaption = @"ObjC2 Category List")
+                                      location:section_64->offset + imageOffset
+                                        length:section_64->size
+                                      pointers:objcCategoryPointers];
+        }
+
+        section_64 = [self findSection64ByName:"__objc_nlcatlist" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_nlcatlist" andSegment:"__DATA_CONST"];
+
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjC2Pointer64ListNode:sectionNode
+                                       caption:(lastNodeCaption = @"ObjC2 Non Lazy Category List")
+                                      location:section_64->offset + imageOffset
+                                        length:section_64->size
+                                      pointers:objcNonLazyCategoryPointers];
+        }
+
+        section_64 = [self findSection64ByName:"__protocol_list" andSegment:"__OBJC2"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_protolist" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_protolist" andSegment:"__DATA_CONST"];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjC2Pointer64ListNode:sectionNode
+                                       caption:(lastNodeCaption = @"ObjC2 Pointer List")
+                                      location:section_64->offset + imageOffset
+                                        length:section_64->size
+                                      pointers:objcProtocolPointers];
+        }
+
+        section_64 = [self findSection64ByName:"__message_refs" andSegment:"__OBJC2"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_msgrefs" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_msgrefs" andSegment:"__DATA_CONST"];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjC2MsgRefs64Node:sectionNode
+                                   caption:(lastNodeCaption = @"ObjC2 Message References")
+                                  location:section_64->offset + imageOffset
+                                    length:section_64->size];
+        }
+
+        section_64 = [self findSection64ByName:"__image_info" andSegment:"__OBJC"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_imageinfo" andSegment:"__DATA"];
+        if (section_64 == NULL)
+            section_64 = [self findSection64ByName:"__objc_imageinfo" andSegment:"__DATA_CONST"];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjCImageInfoNode:sectionNode
+                                  caption:(lastNodeCaption = @"ObjC2 Image Info")
+                                 location:section_64->offset + imageOffset
+                                   length:section_64->size];
+        }
+
+        section_64 = [self findSection64ByName:"__cfstring" andSegment:NULL];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createObjCCFStrings64Node:sectionNode
+                                    caption:(lastNodeCaption = @"ObjC CFStrings")
+                                   location:section_64->offset + imageOffset
+                                     length:section_64->size];
+        }
+
+        section_64 = [self findSection64ByName:"__swift5_types" andSegment:"__TEXT"];
+        if (section_64 && (sectionNode = [self findNodeBySectionAddress:section_64->addr]))
+        {
+            [self createSwiftTypes64Node:sectionNode
+                                 caption:(lastNodeCaption = @"Swift 5 Types")
                                 location:section_64->offset + imageOffset
-                                  length:section_64->size
-                                pointers:objcNonLazyClassPointers];
+                                  length:section_64->size];
+        }
+    }
+    @catch(NSException * exception)
+    {
+        [self printException:exception caption:lastNodeCaption];
     }
 
-    section_64 = [self findSection64ByName:"__class_refs" andSegment:"__OBJC2"];
-    if (section_64 == NULL)
-      section_64 = [self findSection64ByName:"__objc_classrefs" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_classrefs" andSegment:"__DATA_CONST"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
+
+    @try
     {
-      [self createObjC2Pointer64ListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 References") 
-                                location:section_64->offset + imageOffset 
-                                  length:section_64->size
-                                pointers:objcClassReferences];
+        [self parseObjC2Class64Pointers:&objcClassPointers
+                 NonLazyClass64Pointers:&objcNonLazyClassPointers
+                     Category64Pointers:&objcCategoryPointers
+              NonLazyCategory64Pointers:&objcNonLazyCategoryPointers
+                     Protocol64Pointers:&objcProtocolPointers];
     }
-    
-    section_64 = [self findSection64ByName:"__super_refs" andSegment:"__OBJC2"];
-    if (section_64 == NULL)
-      section_64 = [self findSection64ByName:"__objc_superrefs" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_superrefs" andSegment:"__DATA_CONST"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
+    @catch(NSException * exception)
     {
-      [self createObjC2Pointer64ListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 References") 
-                                location:section_64->offset + imageOffset 
-                                  length:section_64->size
-                                pointers:objcSuperReferences];
+        [self printException:exception caption:lastNodeCaption];
     }
 
-    section_64 = [self findSection64ByName:"__category_list" andSegment:"__OBJC2"];
-    if (section_64 == NULL)
-      section_64 = [self findSection64ByName:"__objc_catlist" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_catlist" andSegment:"__DATA_CONST"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
-    {
-      [self createObjC2Pointer64ListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 Category List")
-                                location:section_64->offset + imageOffset 
-                                  length:section_64->size
-                                pointers:objcCategoryPointers];
-    }
-
-    section_64 = [self findSection64ByName:"__objc_nlcatlist" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_nlcatlist" andSegment:"__DATA_CONST"];
-
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
-    {
-      [self createObjC2Pointer64ListNode:sectionNode
-                                 caption:(lastNodeCaption = @"ObjC2 Non Lazy Category List")
-                                location:section_64->offset + imageOffset
-                                  length:section_64->size
-                                pointers:objcNonLazyCategoryPointers];
-    }
-    
-    section_64 = [self findSection64ByName:"__protocol_list" andSegment:"__OBJC2"];
-    if (section_64 == NULL)
-      section_64 = [self findSection64ByName:"__objc_protolist" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_protolist" andSegment:"__DATA_CONST"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
-    {
-      [self createObjC2Pointer64ListNode:sectionNode 
-                                 caption:(lastNodeCaption = @"ObjC2 Pointer List")
-                                location:section_64->offset + imageOffset 
-                                  length:section_64->size
-                                pointers:objcProtocolPointers];
-    }
-    
-    section_64 = [self findSection64ByName:"__message_refs" andSegment:"__OBJC2"];
-    if (section_64 == NULL)
-      section_64 = [self findSection64ByName:"__objc_msgrefs" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_msgrefs" andSegment:"__DATA_CONST"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
-    {
-      [self createObjC2MsgRefs64Node:sectionNode 
-                             caption:(lastNodeCaption = @"ObjC2 Message References") 
-                            location:section_64->offset + imageOffset 
-                              length:section_64->size];
-    }
-    
-    section_64 = [self findSection64ByName:"__image_info" andSegment:"__OBJC"];
-    if (section_64 == NULL)
-      section_64 = [self findSection64ByName:"__objc_imageinfo" andSegment:"__DATA"];
-      if (section_64 == NULL)
-          section_64 = [self findSection64ByName:"__objc_imageinfo" andSegment:"__DATA_CONST"];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
-    {
-      [self createObjCImageInfoNode:sectionNode 
-                            caption:(lastNodeCaption = @"ObjC2 Image Info") 
-                           location:section_64->offset + imageOffset 
-                             length:section_64->size];
-    }
-    
-    section_64 = [self findSection64ByName:"__cfstring" andSegment:NULL];
-    if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
-    {
-      [self createObjCCFStrings64Node:sectionNode 
-                              caption:(lastNodeCaption = @"ObjC CFStrings") 
-                             location:section_64->offset + imageOffset 
-                               length:section_64->size];
-    }
-
-      section_64 = [self findSection64ByName:"__swift5_types" andSegment:"__TEXT"];
-      if ((sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]]))
-      {
-        [self createSwiftTypes64Node:sectionNode
-                               caption:(lastNodeCaption = @"Swift 5 Types")
-                               location:section_64->offset + imageOffset
-                                 length:section_64->size];
-      }
-  }
-  @catch(NSException * exception)
-  {
-    [self printException:exception caption:lastNodeCaption];
-  }
-
-  
-  @try
-  {
-    [self parseObjC2Class64Pointers:&objcClassPointers
-             NonLazyClass64Pointers:&objcNonLazyClassPointers
-                 Category64Pointers:&objcCategoryPointers
-          NonLazyCategory64Pointers:&objcNonLazyCategoryPointers
-                 Protocol64Pointers:&objcProtocolPointers];
-  }
-  @catch(NSException * exception)
-  {
-    [self printException:exception caption:lastNodeCaption];
-  }
-  
 }
 
 //-----------------------------------------------------------------------------
@@ -2076,7 +2063,7 @@ struct CompareSectionByName
   for (SectionVector::const_iterator sectIter = ++sections.begin(); sectIter != sections.end(); ++sectIter)
   {
     struct section const * section = *sectIter;
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection:section]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section->addr];
     if (sectionNode == nil)
     {
       continue;
@@ -2126,7 +2113,7 @@ struct CompareSectionByName
   for (Section64Vector::const_iterator sectIter = ++sections_64.begin(); sectIter != sections_64.end(); ++sectIter)
   {
     struct section_64 const * section_64 = *sectIter;
-    MVNode * sectionNode = [self findNodeByUserInfo:[self userInfoForSection64:section_64]];
+    MVNode * sectionNode = [self findNodeBySectionAddress:section_64->addr];
     if (sectionNode == nil)
     {
       continue;
@@ -2159,7 +2146,7 @@ struct CompareSectionByName
 - (void)processSectionRelocs
 {
   // find Relocations node
-  MVNode * relocsNode = [self findNodeByUserInfo:[self userInfoForRelocs]];
+    MVNode * relocsNode = self.relocsNode;
   if (relocsNode == nil)
   {
     return;
@@ -2193,7 +2180,7 @@ struct CompareSectionByName
 - (void)processSectionRelocs64
 {
   // find Relocations node
-  MVNode * relocsNode = [self findNodeByUserInfo:[self userInfoForRelocs]];
+    MVNode * relocsNode = self.relocsNode;
   if (relocsNode == nil)
   {
     return;
@@ -2575,9 +2562,14 @@ struct CompareSectionByName
                                          location:section->offset + imageOffset
                                            length:(section->flags & SECTION_TYPE) == S_ZEROFILL ||
                                                   (section->flags & SECTION_TYPE) == S_GB_ZEROFILL ? 0 : section->size];
-      
-      [sectionNode.userInfo addEntriesFromDictionary:[self userInfoForSection:section]];
-      
+
+        sectionNode.userInfo.layout = self;
+        sectionNode.userInfo.segmentName = NSSTRING(string(section->segname,16).c_str());
+        sectionNode.userInfo.sectionName = NSSTRING(string(section->sectname,16).c_str());
+        sectionNode.userInfo.address = section->addr;
+
+        [self.sectionNodes setObject:sectionNode forKey:@(section->addr)];
+
       NSRange range = NSMakeRange(section->reloff + imageOffset, section->nreloc * sizeof(struct relocation_info));
       if (range.length > 0)
       {
@@ -2602,9 +2594,14 @@ struct CompareSectionByName
                                          location:section_64->offset + imageOffset
                                            length:(section_64->flags & SECTION_TYPE) == S_ZEROFILL ||
                                                   (section_64->flags & SECTION_TYPE) == S_GB_ZEROFILL ? 0 : section_64->size];
-      
-      [sectionNode.userInfo addEntriesFromDictionary:[self userInfoForSection64:section_64]];
-      
+
+        sectionNode.userInfo.layout = self;
+        sectionNode.userInfo.segmentName = NSSTRING(string(section_64->segname,16).c_str());
+        sectionNode.userInfo.sectionName = NSSTRING(string(section_64->sectname,16).c_str());
+        sectionNode.userInfo.address = section_64->addr;
+
+        [self.sectionNodes setObject:sectionNode forKey:@(section_64->addr)];
+
       NSRange range = NSMakeRange(section_64->reloff + imageOffset, section_64->nreloc * sizeof(struct relocation_info));
       if (range.length > 0)
       {
@@ -2621,8 +2618,8 @@ struct CompareSectionByName
                                        caption:@"Relocations"
                                       location:relocsRange.location
                                         length:relocsRange.length];
-    
-    [relocsNode.userInfo addEntriesFromDictionary:[self userInfoForRelocs]];
+      relocsNode.userInfo.layout = self;
+      self.relocsNode = relocsNode;
   }
  
   //======================== determine SDK ============================

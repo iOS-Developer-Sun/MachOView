@@ -2258,8 +2258,7 @@ using namespace std;
                         section:section];
         
         // preserv section fileOffset/sectName for RVA lookup
-        NSDictionary * userInfo = [self userInfoForSection:section];
-        sectionInfo[section->addr] = make_pair(section->offset + imageOffset, userInfo);
+        sectionInfo[section->addr] = make_pair(section->offset + imageOffset, (void *)section);
         
         // preserv header info for latter use
         sections.push_back(section);
@@ -2294,8 +2293,7 @@ using namespace std;
                        section_64:section_64];
         
         // preserv section fileOffset/sectName for RVA lookup
-        NSDictionary * userInfo = [self userInfoForSection64:section_64];
-        sectionInfo[section_64->addr] = make_pair(section_64->offset + imageOffset, userInfo);
+        sectionInfo[section_64->addr] = make_pair(section_64->offset + imageOffset, (void *)section_64);
 
         // preserv header info for latter use
         sections_64.push_back(section_64);

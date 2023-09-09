@@ -127,7 +127,7 @@ NSString * const MVScannerErrorMessage  = @"NSScanner error";
       NSString * cellContent = [NSString stringWithFormat:@"%.8lX", offset];
       if ([document isRVA] == YES)
       {
-        id layout = [selectedNode.userInfo objectForKey:MVLayoutUserInfoKey];
+        id layout = selectedNode.userInfo.layout;
         return [layout performSelector:@selector(convertToRVA:) withObject:cellContent];
       }
       return cellContent;
@@ -183,7 +183,7 @@ NSString * const MVScannerErrorMessage  = @"NSScanner error";
     {
       if ([document isRVA] == YES)
       {
-        id layout = [selectedNode.userInfo objectForKey:MVLayoutUserInfoKey];
+        id layout = selectedNode.userInfo.layout;
         cellContent = [layout performSelector:@selector(convertToRVA:) withObject:cellContent];
       }
     }

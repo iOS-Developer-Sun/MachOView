@@ -19,7 +19,6 @@ extern NSString * const MVCellColorAttributeName;
 extern NSString * const MVTextColorAttributeName;
 extern NSString * const MVMetaDataAttributeName;
 
-extern NSString * const MVLayoutUserInfoKey;
 extern NSString * const MVNodeUserInfoKey;
 extern NSString * const MVStatusUserInfoKey;
 
@@ -109,6 +108,17 @@ struct MVNodeSaver;
 
 @end
 
+@class MVLayout;
+
+@interface MVNodeInfo : NSObject
+
+@property (nonatomic, weak) MVLayout *layout;
+@property (nonatomic, copy) NSString *segmentName;
+@property (nonatomic, copy) NSString *sectionName;
+@property (nonatomic, assign) uint64_t address;
+
+@end
+
 //----------------------------------------------------------------------------
 @interface MVNode : NSObject <MVSerializing>
 {
@@ -117,7 +127,6 @@ struct MVNodeSaver;
   NSMutableArray *      children;
   NSRange               dataRange;
   MVTable *             details;
-  NSMutableDictionary * userInfo;
   uint32_t              detailsOffset;
 }
 
@@ -125,14 +134,14 @@ struct MVNodeSaver;
 @property (nonatomic,weak)      MVNode *              parent;
 @property (nonatomic)                   NSRange               dataRange;
 @property (nonatomic)                   MVTable *             details;
-@property (nonatomic)                   NSMutableDictionary * userInfo;
+@property (nonatomic)                   MVNodeInfo * userInfo;
 @property (nonatomic)                   uint32_t              detailsOffset;
 
 - (NSUInteger)          numberOfChildren;
 - (MVNode *)            childAtIndex:(NSUInteger)n;
 - (MVNode *)            insertChild:(NSString *)_caption location:(uint32_t)location length:(uint32_t)length;
 - (MVNode *)            insertChildWithDetails:(NSString *)_caption location:(uint32_t)location length:(uint32_t)length saver:(MVNodeSaver &)saver;
-- (MVNode *)            findNodeByUserInfo:(NSDictionary *)uinfo;
+- (MVNode *)findNode:(BOOL(^)(MVNode *node))block;
 - (void)                openDetails;  // open swap file for reading details on demand
 - (void)                closeDetails; // close swap file
 - (void)                sortDetails;

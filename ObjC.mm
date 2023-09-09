@@ -558,9 +558,13 @@ struct swift_field_descriptor
 //------------------------------------------------------------------------------
 - (MVNode *)objcSectionNodeContainsRVA:(uint32_t)rva
 {
-  MVNode * node = [self sectionNodeContainsRVA:rva];
-  // segment name must be __OBJC
-  return (node && [[node.userInfo objectForKey:@"segname"] isEqualToString:@"__OBJC"] ? node: nil);
+    MVNode * node = [self sectionNodeContainsRVA:rva];
+    // segment name must be __OBJC
+    if (![node.userInfo.segmentName isEqualToString:@"__OBJC"]) {
+        return nil;
+    }
+
+    return node;
 }
 
 //------------------------------------------------------------------------------

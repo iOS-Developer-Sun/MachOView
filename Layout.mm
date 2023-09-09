@@ -108,10 +108,10 @@
 //-----------------------------------------------------------------------------
 // Depth-first Traversal of nodes
 //-----------------------------------------------------------------------------
-- (MVNode *)findNodeByUserInfo:(NSDictionary *)userInfo
-{
+
+- (MVNode *)findNodeBy:(BOOL (^)(MVNode *))block {
   [dataController.treeLock lock];
-  MVNode * node = [rootNode findNodeByUserInfo:userInfo];
+  MVNode * node = [rootNode findNode:block];
   [dataController.treeLock unlock];
   
   return node;

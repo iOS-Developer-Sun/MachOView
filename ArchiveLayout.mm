@@ -277,7 +277,7 @@
     
     objectInfo.layout = [MachOLayout layoutWithDataController:dataController rootNode:objectNode];
     
-    [objectNode.userInfo setObject:objectInfo.layout forKey:MVLayoutUserInfoKey];
+    objectNode.userInfo.layout = objectInfo.layout;
     [objectInfo.layout doMainTasks];
     
     // move to the next header

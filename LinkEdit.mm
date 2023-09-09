@@ -2060,7 +2060,6 @@ using namespace std;
 }
 
 - (void)fixupPage64:(uint32_t)pageOffset segInfo:(struct dyld_chained_starts_in_segment *)segInfo offsetBased:(BOOL)offsetBased {
-    assert(pageOffset != DYLD_CHAINED_PTR_START_NONE );
     uint64_t targetAdjust = 0;
     uint32_t offset = pageOffset;
     uint64_t delta = 0;
@@ -2087,12 +2086,13 @@ using namespace std;
 //                        NSLog(@"0x%X -> 0x%X", offset, newValue);
                     }
                 } else {
-                    NSNumber *addressNumber = self.dyldHelper.externalMap[symbol];
-                    if (addressNumber) {
-                        uint64_t address =
-                        [addressNumber unsignedLongLongValue];
-                        uint64_t newValue = address + addend;
+                    DyldHelper *dyldHelper = [self generateDyldHelper];
+                    NSNumber *addressNumber = dyldHelper.externalMap[symbol];
+                    if (addressNumber && (addend == 0)) {
+                        uint64_t address = [addressNumber unsignedLongLongValue];
+                        uint64_t newValue = address;
                         [dataController.realData replaceBytesInRange:NSMakeRange(offset,8) withBytes:&newValue];
+//                        NSLog(@"0x%X -> 0x%X", offset, newValue);
                     }
                 }
             }
@@ -2154,21 +2154,21 @@ using namespace std;
                                        :@""
                                        :@"Symbol Name"
                                        :[NSString stringWithFormat:@"%s", symbolName]];
-                if (imports->weak_import) {
+                if (imports[i].weak_import) {
                     [node.details appendRow:@""
                                            :@""
                                            :@"Weak Import"
                                            :[NSString stringWithFormat:@"%s", symbolName]];
                 }
 
+                [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+
                 MachOLayoutFixupImport *fixupImport = [[MachOLayoutFixupImport alloc] init];
                 fixupImport.libOrdinal = libOrdinal;
                 fixupImport.symbol = @(symbolName);
                 fixupImport.appendex = 0;
-                fixupImport.weak = imports->weak_import;
+                fixupImport.weak = imports[i].weak_import;
                 [fixupImports addObject:fixupImport];
-
-                [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
             }
         } break;
         case DYLD_CHAINED_IMPORT_ADDEND: {
@@ -2215,6 +2215,13 @@ using namespace std;
                                        :[NSString stringWithFormat:@"%d", appendex]];
 
                 [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+
+                MachOLayoutFixupImport *fixupImport = [[MachOLayoutFixupImport alloc] init];
+                fixupImport.libOrdinal = libOrdinal;
+                fixupImport.symbol = @(symbolName);
+                fixupImport.appendex = imports[i].addend;
+                fixupImport.weak = imports[i].weak_import;
+                [fixupImports addObject:fixupImport];
             }
         } break;
         case DYLD_CHAINED_IMPORT_ADDEND64: {
@@ -2248,7 +2255,7 @@ using namespace std;
                                        :@""
                                        :@"Symbol Name"
                                        :[NSString stringWithFormat:@"%s", symbolName]];
-                if (imports->weak_import) {
+                if (imports[i].weak_import) {
                     [node.details appendRow:@""
                                            :@""
                                            :@"Weak Import"
@@ -2261,6 +2268,13 @@ using namespace std;
                                        :[NSString stringWithFormat:@"%lld", appendex]];
 
                 [node.details setAttributes:MVUnderlineAttributeName,@"YES",nil];
+
+                MachOLayoutFixupImport *fixupImport = [[MachOLayoutFixupImport alloc] init];
+                fixupImport.libOrdinal = libOrdinal;
+                fixupImport.symbol = @(symbolName);
+                fixupImport.appendex = imports[i].addend;
+                fixupImport.weak = imports[i].weak_import;
+                [fixupImports addObject:fixupImport];
             }
         } break;
         default:

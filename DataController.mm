@@ -41,7 +41,6 @@ NSString * const MVCellColorAttributeName         = @"MVCellColorAttribute";
 NSString * const MVTextColorAttributeName         = @"MVTextColorAttribute";
 NSString * const MVMetaDataAttributeName          = @"MVMetaDataAttribute";
 
-NSString * const MVLayoutUserInfoKey              = @"MVLayoutUserInfoKey";
 NSString * const MVNodeUserInfoKey                = @"MVNodeUserInfoKey";
 NSString * const MVStatusUserInfoKey              = @"MVStatusUserInfoKey";
 
@@ -696,6 +695,10 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
 @end
 
 
+@implementation MVNodeInfo
+
+@end
+
 //============================================================================
 @implementation MVNode
 
@@ -707,7 +710,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
   if (self = [super init]) 
   {
     children = [[NSMutableArray alloc] init];
-    userInfo = [[NSMutableDictionary alloc] init];
+    userInfo = [[MVNodeInfo alloc] init];
   }
   return self;
 }
@@ -733,7 +736,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
 //----------------------------------------------------------------------------
 - (void)insertNode:(MVNode *)node
 {
-  MVLayout * layout = [userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout *layout = userInfo.layout;
   
   [layout.dataController.treeLock lock];
   
@@ -778,8 +781,8 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
   node.caption = _caption;
   node.dataRange = NSMakeRange(location,length);
   node.parent = self;
-  [node.userInfo addEntriesFromDictionary:userInfo];
-  [self insertNode:node]; 
+  node.userInfo.layout = userInfo.layout;
+  [self insertNode:node];
   return node;
 }
 
@@ -790,39 +793,41 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
                           saver:(MVNodeSaver &)saver
 {
   MVNode * node = [self insertChild:_caption location:location length:length];
-  MVLayout * layout = [userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout * layout = userInfo.layout;
   node.details = [MVTable tableWithArchiver:layout.archiver];
   saver.setNode(node);
   return node;
 }
 
 //----------------------------------------------------------------------------
-- (MVNode *)findNodeByUserInfo:(NSDictionary *)uinfo
-{
-  // act node
-  if ([userInfo isEqualToDictionary:uinfo] == YES)
-  {
-    return self;
-  }
-
-  // recursively on childrens
-  for (MVNode * node in children)
-  {
-    MVNode * found = [node findNodeByUserInfo:uinfo];
-    if (found != nil)
-    {
-      return found;
+- (MVNode *)findNode:(BOOL(^)(MVNode *node))block {
+    if (!block) {
+        return nil;
     }
-  }
-  
-  // give up
-  return nil;
+
+    if (block(self)) {
+        return self;
+    }
+
+    // recursively on childrens
+    for (MVNode * node in children)
+    {
+        MVNode * found = [node findNode:block];
+        if (found != nil)
+        {
+            return found;
+        }
+    }
+
+    // give up
+    return nil;
 }
+
 
 //-----------------------------------------------------------------------------
 - (void)openDetails
 {
-  MVLayout * layout = [userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout * layout = userInfo.layout;
   FILE * pFile = fopen(CSTRING(layout.archiver.swapPath), "r");
   if (pFile != NULL)
   {
@@ -850,7 +855,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
 //-----------------------------------------------------------------------------
 - (void)sortDetails
 {
-  MVLayout * layout = [userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout * layout = userInfo.layout;
   [layout.dataController updateStatus:MVStatusTaskStarted];
   [details sortByOffset];
   [layout.dataController updateStatus:MVStatusTaskTerminated];
@@ -859,7 +864,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
 //----------------------------------------------------------------------------
 - (void)filterDetails: (NSString *)filter
 {
-  MVLayout * layout = [userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout * layout = userInfo.layout;
   [layout.dataController updateStatus:MVStatusTaskStarted];
   [layout.archiver suspend];
   [details applyFilter:filter];
@@ -870,7 +875,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
 //-----------------------------------------------------------------------------
 - (void)saveToFile:(FILE *)pFile
 {
-  MVLayout * layout = [userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout * layout = userInfo.layout;
   [layout.dataController updateStatus:MVStatusTaskStarted];
   
   uint32_t filePos = ftell(pFile);
@@ -894,7 +899,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
 //-----------------------------------------------------------------------------
 - (void)loadFromFile:(FILE *)pFile
 {
-  MVLayout * layout = [userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout * layout = userInfo.layout;
   [layout.dataController updateStatus:MVStatusTaskStarted];
   details = [MVTable tableWithArchiver:layout.archiver];
   details.swapFile = pFile;
@@ -907,7 +912,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
 //-----------------------------------------------------------------------------
 -(void)clear
 {
-  MVLayout * layout = [userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout * layout = userInfo.layout;
   if (layout.dataController.selectedNode != self)
   {
     details = nil;
@@ -1022,8 +1027,8 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
                   [machine isEqualToString:@"ARM"] == YES ? [self getARMCpu:mach_header->cpusubtype] : machine];
   
   MachOLayout * layout = [MachOLayout layoutWithDataController:self rootNode:node];
-                          
-  [node.userInfo setObject:layout forKey:MVLayoutUserInfoKey];
+
+  node.userInfo.layout = layout;
   
   if ([self isSupportedMachine:machine])
   {
@@ -1058,7 +1063,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
   
   MachOLayout * layout = [MachOLayout layoutWithDataController:self rootNode:node];
 
-  [node.userInfo setObject:layout forKey:MVLayoutUserInfoKey];
+  node.userInfo.layout = layout;
 
   if ([self isSupportedMachine:machine])
   {
@@ -1078,7 +1083,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
   
   ArchiveLayout * layout = [ArchiveLayout layoutWithDataController:self rootNode:node];
   
-  [node.userInfo setObject:layout forKey:MVLayoutUserInfoKey];
+  node.userInfo.layout = layout;
     
   if (machine == nil || [self isSupportedMachine:machine])
     {
@@ -1145,7 +1150,7 @@ NSString * const MVStatusTaskTerminated           = @"MVStatusTaskTerminated";
   node.caption = @"Fat Binary";
   FatLayout * layout = [FatLayout layoutWithDataController:self rootNode:node];
   
-  [node.userInfo setObject:layout forKey:MVLayoutUserInfoKey];
+  node.userInfo.layout = layout;
   
   [layouts addObject:layout];
   for (uint32_t nimg = 0; nimg < fat_header->nfat_arch; ++nimg)
@@ -1372,6 +1377,6 @@ MVNodeSaver::MVNodeSaver()
 //-----------------------------------------------------------------------------
 MVNodeSaver::~MVNodeSaver() 
 {
-  MVLayout * layout = [m_node.userInfo objectForKey:MVLayoutUserInfoKey];
+  MVLayout * layout = m_node.userInfo.layout;
   [layout.archiver addObjectToSave:m_node];
 }
