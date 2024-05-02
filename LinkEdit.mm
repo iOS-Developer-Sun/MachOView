@@ -2038,15 +2038,15 @@ using namespace std;
 
 - (void)fixupPage:(uint32_t)pageOffset segInfo:(struct dyld_chained_starts_in_segment *)segInfo {
     switch (segInfo->pointer_format) {
-#if  __has_feature(ptrauth_calls)
+//#if  __has_feature(ptrauth_calls)
         case DYLD_CHAINED_PTR_ARM64E:
-            fixupPageAuth64(pageContent, blob, segInfo, pageIndex, false);
+            [self fixupPageAuth64:pageOffset segInfo:segInfo offsetBased:false];
             break;
         case DYLD_CHAINED_PTR_ARM64E_USERLAND:
         case DYLD_CHAINED_PTR_ARM64E_USERLAND24:
-            fixupPageAuth64(pageContent, blob, segInfo, pageIndex, true);
+            [self fixupPageAuth64:pageOffset segInfo:segInfo offsetBased:true];
             break;
-#endif
+//#endif
         case DYLD_CHAINED_PTR_64:
             [self fixupPage64:pageOffset segInfo:segInfo offsetBased:false];
             break;
@@ -2105,7 +2105,124 @@ using namespace std;
             uint64_t newValue = target + targetAdjust + (high8 << 56);
             [dataController.realData replaceBytesInRange:NSMakeRange(offset,8) withBytes:&newValue];
         }
-        offset = offset + (delta * 4); // 4-byte stride
+        offset += delta * 4; // 4-byte stride
+    } while ( delta != 0 );
+}
+
+static uint64_t signPointer(uint64_t unsignedAddr, void* loc, bool addrDiv, uint16_t diversity, ptrauth_key key)
+{
+#if __has_feature(ptrauth_calls)
+        // don't sign NULL
+    if ( unsignedAddr == 0 )
+        return 0;
+
+    uint64_t extendedDiscriminator = diversity;
+    if ( addrDiv )
+        extendedDiscriminator = __builtin_ptrauth_blend_discriminator(loc, extendedDiscriminator);
+    switch ( key ) {
+        case ptrauth_key_asia:
+            return (uint64_t)__builtin_ptrauth_sign_unauthenticated((void*)unsignedAddr, 0, extendedDiscriminator);
+        case ptrauth_key_asib:
+            return (uint64_t)__builtin_ptrauth_sign_unauthenticated((void*)unsignedAddr, 1, extendedDiscriminator);
+        case ptrauth_key_asda:
+            return (uint64_t)__builtin_ptrauth_sign_unauthenticated((void*)unsignedAddr, 2, extendedDiscriminator);
+        case ptrauth_key_asdb:
+            return (uint64_t)__builtin_ptrauth_sign_unauthenticated((void*)unsignedAddr, 3, extendedDiscriminator);
+    }
+    assert(0 && "invalid signing key");
+#else
+    return unsignedAddr;
+#endif
+}
+
+- (void)fixupPageAuth64:(uint32_t)pageOffset segInfo:(struct dyld_chained_starts_in_segment *)segInfo offsetBased:(BOOL)offsetBased {
+    uint64_t targetAdjust = 0;
+    uint32_t offset = pageOffset;
+    uint64_t delta = 0;
+
+    do {
+        NSRange range = NSMakeRange(offset, 0);
+        uint64_t value  = [dataController read_uint64:range];
+        bool isAuth = (value & 0x8000000000000000ULL);
+        bool isBind = (value & 0x4000000000000000ULL);
+        delta = (value >> 51) & 0x7FF;
+        if (isAuth) {
+            ptrauth_key  key   = (ptrauth_key)((value >> 49) & 0x3);
+            bool     addrDiv   = ((value & (1ULL << 48)) != 0);
+            uint16_t diversity = (uint16_t)((value >> 32) & 0xFFFF);
+            if (isBind) {
+                uint32_t bindOrdinal = value & 0x00FFFFFF;
+                uint32_t addend = (value >> 24) & 0xFF;
+                if (bindOrdinal < fixupImports.count) {
+                    MachOLayoutFixupImport *fixupImport = fixupImports[bindOrdinal];
+                    NSString *symbol = fixupImport.symbol;
+                    if (fixupImport.libOrdinal == 0) {
+                        NSNumber *addressNumber = symbolsMap[symbol];
+                        if (addressNumber) {
+                            uint64_t address =
+                            [addressNumber unsignedLongLongValue];
+                            uint64_t newValue = signPointer(address, NULL, addrDiv, diversity, key);
+                                //address + addend;
+                            [dataController.realData replaceBytesInRange:NSMakeRange(offset,8) withBytes:&newValue];
+//                        NSLog(@"0x%X -> 0x%X", offset, newValue);
+                        }
+                    } else {
+                        DyldHelper *dyldHelper = [self generateDyldHelper];
+                        NSNumber *addressNumber = dyldHelper.externalMap[symbol];
+                        if (addressNumber && (addend == 0)) {
+                            uint64_t address = [addressNumber unsignedLongLongValue];
+                            uint64_t newValue = address;
+                            [dataController.realData replaceBytesInRange:NSMakeRange(offset,8) withBytes:&newValue];
+//                        NSLog(@"0x%X -> 0x%X", offset, newValue);
+                        }
+                    }
+                }
+            } else {
+                uint64_t target = (value & 0xFFFFFFFF);
+                uint64_t newValue = signPointer(target, NULL, addrDiv, diversity, key);
+                [dataController.realData replaceBytesInRange:NSMakeRange(offset,8) withBytes:&newValue];
+                NSLog(@"0x%X -> 0x%X", offset, newValue);
+            }
+        } else {
+            if ( isBind ) {
+                // is bind
+                uint32_t bindOrdinal = value & 0x00FFFFFF;
+                uint64_t addend = (value >> 32) & 0x0007FFFF;
+                if ( addend & 0x40000 ) {
+                    addend |=  0xFFFFFFFFFFFC0000ULL;
+                }
+                if (bindOrdinal < fixupImports.count) {
+                    MachOLayoutFixupImport *fixupImport = fixupImports[bindOrdinal];
+                    NSString *symbol = fixupImport.symbol;
+                    if (fixupImport.libOrdinal == 0) {
+                        NSNumber *addressNumber = symbolsMap[symbol];
+                        if (addressNumber) {
+                            uint64_t address =
+                            [addressNumber unsignedLongLongValue];
+                            uint64_t newValue = address + addend;
+                            [dataController.realData replaceBytesInRange:NSMakeRange(offset,8) withBytes:&newValue];
+                                //                        NSLog(@"0x%X -> 0x%X", offset, newValue);
+                        }
+                    } else {
+                        DyldHelper *dyldHelper = [self generateDyldHelper];
+                        NSNumber *addressNumber = dyldHelper.externalMap[symbol];
+                        if (addressNumber && (addend == 0)) {
+                            uint64_t address = [addressNumber unsignedLongLongValue];
+                            uint64_t newValue = address;
+                            [dataController.realData replaceBytesInRange:NSMakeRange(offset,8) withBytes:&newValue];
+//                        NSLog(@"0x%X -> 0x%X", offset, newValue);
+                        }
+                    }
+                }
+            } else {
+                    // is rebase
+                uint64_t target = value & 0x7FFFFFFFFFFULL;
+                uint64_t high8  = (value << 13) & 0xFF00000000000000ULL;
+                uint64_t newValue = target + targetAdjust + high8;
+                [dataController.realData replaceBytesInRange:NSMakeRange(offset,8) withBytes:&newValue];
+            }
+        }
+        offset += delta * 8;
     } while ( delta != 0 );
 }
 
